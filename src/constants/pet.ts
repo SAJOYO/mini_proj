@@ -41,6 +41,33 @@ export const DEFAULT_ANIMATION: AnimationName = 'breathe';
  * ------------------------------------------------------------------ */
 
 /**
+ * FCI(국제애견연맹) 그룹 번호.
+ *
+ * 강아지 190여 종을 계통·용도에 따라 열 갈래로 묶은 분류입니다.
+ * 품종을 하나하나 다 넣기 전에, 그룹별 대표 견종부터 채우는 뼈대로 씁니다.
+ */
+export type FciGroup = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+/**
+ * 그룹 번호 → 한글 이름.
+ *
+ * 목록 화면에서 품종을 그룹별로 묶어 보여줄 때 씁니다.
+ * 예시 견종은 각 그룹의 대표 몇 종입니다(전부가 아닙니다).
+ */
+export const FCI_GROUPS: Record<FciGroup, string> = {
+  1: '1그룹 · 목양견 (보더콜리·셰퍼드·코기)',
+  2: '2그룹 · 핀셔·슈나우저·마스티프 (도베르만)',
+  3: '3그룹 · 테리어 (요크셔테리어)',
+  4: '4그룹 · 닥스훈트',
+  5: '5그룹 · 스피츠·원시견 (시바·포메·허스키)',
+  6: '6그룹 · 후각 하운드 (비글)',
+  7: '7그룹 · 포인터·세터 (조렵견)',
+  8: '8그룹 · 리트리버·스패니얼·워터도그',
+  9: '9그룹 · 반려·토이견 (푸들·말티즈·치와와)',
+  10: '10그룹 · 시각 하운드 (그레이하운드)',
+};
+
+/**
  * 품종 하나를 구성하는 숫자들.
  *
  * 리그(부위별로 쪼갠 캐릭터 구조)가 이 값을 받아 형태를 만듭니다.
@@ -50,6 +77,11 @@ export const DEFAULT_ANIMATION: AnimationName = 'breathe';
 export type BreedPreset = {
   /** 목록·디버그 화면에 보여줄 한글 이름 */
   label: string;
+  /**
+   * FCI 그룹. 목록을 계통별로 묶을 때 씁니다.
+   * 원점(기본)처럼 특정 그룹에 속하지 않는 프리셋은 비워 둡니다.
+   */
+  group?: FciGroup;
   /**
    * 귀가 벌어진 각도(도). 0 ~ 170 범위.
    *   0~30   곧게 섬 (시바)
@@ -115,6 +147,7 @@ export const BREEDS = {
   shiba: {
     ...NEUTRAL_BREED,
     label: '시바견',
+    group: 5,
     earAngle: 14,
     earLength: 0.85,
     tailCurl: 0.9,
@@ -124,6 +157,7 @@ export const BREEDS = {
   retriever: {
     ...NEUTRAL_BREED,
     label: '골든 리트리버',
+    group: 8,
     earAngle: 142,
     earLength: 1.25,
     tailCurl: 0.2,
@@ -133,6 +167,7 @@ export const BREEDS = {
   dachshund: {
     ...NEUTRAL_BREED,
     label: '닥스훈트',
+    group: 4,
     earAngle: 155,
     earLength: 1.45,
     snoutLength: 1.5,
@@ -143,6 +178,7 @@ export const BREEDS = {
   poodle: {
     ...NEUTRAL_BREED,
     label: '푸들',
+    group: 9,
     earAngle: 128,
     earLength: 1.1,
     snoutLength: 1.1,
@@ -154,6 +190,7 @@ export const BREEDS = {
   beagle: {
     ...NEUTRAL_BREED,
     label: '비글',
+    group: 6,
     earAngle: 148,
     earLength: 1.3,
     snoutLength: 1.15,
@@ -166,6 +203,7 @@ export const BREEDS = {
   shihtzu: {
     ...NEUTRAL_BREED,
     label: '시츄',
+    group: 9,
     earAngle: 135,
     earLength: 1.3,
     // 코가 눌린 견종이라 주둥이가 아주 짧습니다
@@ -177,6 +215,7 @@ export const BREEDS = {
   maltese: {
     ...NEUTRAL_BREED,
     label: '말티즈',
+    group: 9,
     earAngle: 130,
     earLength: 1.2,
     snoutLength: 0.75,
@@ -188,6 +227,7 @@ export const BREEDS = {
   corgi: {
     ...NEUTRAL_BREED,
     label: '웰시코기',
+    group: 1,
     // 크고 곧게 선 귀가 코기의 특징입니다
     earAngle: 10,
     earLength: 1.15,
@@ -202,6 +242,7 @@ export const BREEDS = {
   chihuahua: {
     ...NEUTRAL_BREED,
     label: '치와와',
+    group: 9,
     // 몸에 비해 큼직하고 쫑긋 선 귀가 치와와의 상징입니다
     earAngle: 20,
     earLength: 1.4,
@@ -216,6 +257,7 @@ export const BREEDS = {
   bichon: {
     ...NEUTRAL_BREED,
     label: '비숑프리제',
+    group: 9,
     // 귀가 복슬복슬한 털에 파묻혀 아래로 처져 보입니다
     earAngle: 122,
     earLength: 1,
@@ -227,6 +269,71 @@ export const BREEDS = {
     furPattern: 'solid',
     furTexture: 'curly',
   },
+
+  /* --- 비어 있던 그룹을 채우는 대표 견종 --- */
+
+  // 2그룹 — 도베르만. 쫑긋 세운 귀, 긴 주둥이, 짧게 자른 꼬리에 매끈한 검은 몸.
+  doberman: {
+    ...NEUTRAL_BREED,
+    label: '도베르만',
+    group: 2,
+    earAngle: 16,
+    earLength: 1.1,
+    snoutLength: 1.3,
+    tailCurl: 0.15,
+    // 단미 — 꼬리가 짧습니다
+    tailLength: 0.5,
+    bodyRatio: 1.15,
+    furColor: '#3A2F2A',
+    // 눈 위·주둥이의 밝은 태닝 무늬를 얼룩으로 흉내 냅니다
+    furPattern: 'patch',
+  },
+  // 3그룹 — 요크셔테리어. 작은 몸에 쫑긋한 귀, 짧은 주둥이, 찰랑이는 실키 코트.
+  yorkshire: {
+    ...NEUTRAL_BREED,
+    label: '요크셔테리어',
+    group: 3,
+    earAngle: 22,
+    earLength: 0.85,
+    snoutLength: 0.8,
+    tailCurl: 0.35,
+    // 손바닥만 한 토이 테리어라 몸이 작습니다
+    bodyRatio: 0.85,
+    furColor: '#8A6F52',
+    // 얼굴은 밝고 몸은 짙은 스틸블루 — 두 톤을 얼룩으로 표현합니다
+    furPattern: 'patch',
+  },
+  // 7그룹 — 포인터. 길게 늘어진 귀와 긴 주둥이, 흰 바탕에 간 무늬(spotted)의 조렵견.
+  pointer: {
+    ...NEUTRAL_BREED,
+    label: '포인터',
+    group: 7,
+    earAngle: 138,
+    earLength: 1.25,
+    snoutLength: 1.35,
+    tailCurl: 0.2,
+    bodyRatio: 1.1,
+    furColor: '#EDE3D6',
+    // 흰 바탕에 간(liver) 반점
+    furPattern: 'spotted',
+  },
+  // 10그룹 — 그레이하운드. 뒤로 접힌 작은 장미귀, 아주 긴 주둥이, 길고 낮은 꼬리.
+  greyhound: {
+    ...NEUTRAL_BREED,
+    label: '그레이하운드',
+    group: 10,
+    // 평소엔 뒤로 착 접혀 있어 각도를 눕히고 길이를 줄입니다
+    earAngle: 100,
+    earLength: 0.8,
+    // 시각 하운드 특유의 길고 뾰족한 주둥이
+    snoutLength: 1.55,
+    // 다리 사이로 말려드는 길고 얇은 꼬리
+    tailCurl: 0.05,
+    tailLength: 1.2,
+    bodyRatio: 0.95,
+    furColor: '#C3AE93',
+    furPattern: 'solid',
+  },
 } as const satisfies Record<string, BreedPreset>;
 
 export type BreedId = keyof typeof BREEDS;
@@ -237,6 +344,25 @@ export const DEFAULT_BREED: BreedId = 'neutral';
 /** 알 수 없는 품종 문자열이 들어와도 앱이 죽지 않게 걸러줍니다. */
 export function resolveBreed(id: string | null | undefined): BreedId {
   return id != null && id in BREEDS ? (id as BreedId) : DEFAULT_BREED;
+}
+
+/**
+ * 품종을 FCI 그룹별로 묶어 돌려줍니다.
+ *
+ * 그룹이 없는 원점(neutral)은 빠지고, 그룹 번호 순(1→10)으로 정렬됩니다.
+ * 목록 화면에서 "그룹 → 그 그룹의 품종들" 꼴로 뿌릴 때 씁니다.
+ */
+export function breedsByGroup(): { group: FciGroup; label: string; breeds: BreedId[] }[] {
+  const ids = Object.keys(BREEDS) as BreedId[];
+  return (Object.keys(FCI_GROUPS) as unknown as FciGroup[])
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((group) => ({
+      group: group as FciGroup,
+      label: FCI_GROUPS[group as FciGroup],
+      breeds: ids.filter((id) => BREEDS[id].group === group),
+    }))
+    .filter((g) => g.breeds.length > 0);
 }
 
 /* ------------------------------------------------------------------ *

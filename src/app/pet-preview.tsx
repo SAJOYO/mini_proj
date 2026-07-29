@@ -7,6 +7,7 @@ import { Screen } from '@/components/screen';
 import {
   ANIMATION_NAMES,
   BREEDS,
+  breedsByGroup,
   LIFE_STAGES,
   LIFE_STAGE_NAMES,
   type AnimationName,
@@ -77,18 +78,24 @@ export default function PetPreviewScreen() {
         ))}
       </View>
 
-      <Text style={[styles.heading, { color: c.text }]}>품종</Text>
+      <Text style={[styles.heading, { color: c.text }]}>품종 (FCI 그룹별)</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
-        같은 리그에 숫자만 바꿔 끼운 결과입니다. 전부 숨 쉬는 중입니다.
+        같은 리그에 숫자만 바꿔 끼운 결과입니다. 전부 숨 쉬는 중입니다. 강아지 190여 종을 계통별로
+        묶은 FCI 10개 그룹에 맞춰, 그룹마다 대표 견종부터 채워 넣었습니다.
       </Text>
-      <View style={styles.row}>
-        {breeds.map((b) => (
-          <View key={b} style={styles.cell}>
-            <PetRig preset={BREEDS[b]} size={120} animation="breathe" />
-            <Text style={[styles.caption, { color: c.text }]}>{BREEDS[b].label}</Text>
+      {breedsByGroup().map(({ group, label, breeds: groupBreeds }) => (
+        <View key={group} style={styles.group}>
+          <Text style={[styles.groupTitle, { color: c.primary }]}>{label}</Text>
+          <View style={styles.row}>
+            {groupBreeds.map((b) => (
+              <View key={b} style={styles.cell}>
+                <PetRig preset={BREEDS[b]} size={110} animation="breathe" />
+                <Text style={[styles.caption, { color: c.text }]}>{BREEDS[b].label}</Text>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
+        </View>
+      ))}
 
       <Text style={[styles.heading, { color: c.text }]}>자세</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
@@ -162,6 +169,14 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: FontSize.caption,
     fontWeight: '700',
+  },
+  group: {
+    marginBottom: Spacing.lg,
+  },
+  groupTitle: {
+    fontSize: FontSize.label,
+    fontWeight: '700',
+    marginBottom: Spacing.sm,
   },
   row: {
     flexDirection: 'row',
