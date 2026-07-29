@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PetCharacter } from '@/components/pet-character';
 import { PetRig, type PetPose } from '@/components/pet-rig';
+import { Scene, SCENE_KINDS, type SceneKind } from '@/components/pet-scene';
 import { Screen } from '@/components/screen';
 import {
   ANIMATION_NAMES,
@@ -29,20 +30,29 @@ export default function PetPreviewScreen() {
   const [animation, setAnimation] = useState<AnimationName>('breathe');
   const [breed, setBreed] = useState<BreedId>('shiba');
   const [stage, setStage] = useState<LifeStage>('adult');
+  const [scene, setScene] = useState<SceneKind>('room');
 
   const breeds = Object.keys(BREEDS) as BreedId[];
+  const sceneLabels: Record<SceneKind, string> = { room: '방', water: '물속', neutral: '뉴트럴' };
 
   return (
     <Screen scroll>
       <Text style={[styles.heading, { color: c.text }]}>움직임</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
-        눌러서 동작·품종·생애 단계를 바꿔보세요. 계속 반복 재생됩니다.
+        눌러서 배경·동작·품종·생애 단계를 바꿔보세요. 계속 반복 재생됩니다.
       </Text>
 
       <View style={styles.stage}>
-        <PetCharacter breed={breed} stage={stage} animation={animation} size={220} />
+        <Scene kind={scene}>
+          <PetCharacter breed={breed} stage={stage} animation={animation} size={220} />
+        </Scene>
       </View>
 
+      <View style={styles.chips}>
+        {SCENE_KINDS.map((s) => (
+          <Chip key={s} label={sceneLabels[s]} active={s === scene} onPress={() => setScene(s)} />
+        ))}
+      </View>
       <View style={styles.chips}>
         {ANIMATION_NAMES.map((a) => (
           <Chip key={a} label={a} active={a === animation} onPress={() => setAnimation(a)} />
