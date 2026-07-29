@@ -72,6 +72,13 @@ export type BreedPreset = {
   furColor: string;
   /** 무늬 종류 */
   furPattern: 'solid' | 'patch' | 'spotted';
+  /**
+   * 털 질감.
+   * smooth = 매끈한 윤곽, curly = 곱슬(푸들처럼 윤곽이 물결칩니다).
+   * 머리·귀·몸통 실루엣에만 적용되고 주둥이는 항상 매끈합니다.
+   * (푸들은 실제로 주둥이 털을 짧게 미는 견종입니다.)
+   */
+  furTexture: 'smooth' | 'curly';
 };
 
 /**
@@ -94,6 +101,7 @@ export const NEUTRAL_BREED: BreedPreset = {
   bodyRatio: 1,
   furColor: '#C9A227',
   furPattern: 'solid',
+  furTexture: 'smooth',
 };
 
 /**
@@ -141,6 +149,7 @@ export const BREEDS = {
     tailCurl: 0.6,
     furColor: '#F0E4D4',
     furPattern: 'solid',
+    furTexture: 'curly',
   },
   beagle: {
     ...NEUTRAL_BREED,

@@ -278,6 +278,7 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
   // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
   // 무늬가 아니라 때 묻은 자국처럼 보입니다.
   const patch = shade(fur, -88);
+  const curly = preset.furTexture === 'curly';
 
   // 품종 숫자를 실제 치수로 변환
   const bodyRx = 44 + (preset.bodyRatio - 1) * 10;
@@ -341,17 +342,20 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
 
         {/* 몸통 */}
         <AnimatedG animatedProps={bodyProps}>
-          <Ellipse
+          <Blob
             cx={ANCHOR.body.x}
             cy={ANCHOR.body.y}
             rx={bodyRx}
             ry={42}
+            curly={curly}
+            bumps={16}
+            amp={4.5}
             fill={fur}
             stroke={line}
             strokeWidth={5}
           />
           {/* 가슴 털 */}
-          <Ellipse cx={100} cy={162} rx={20} ry={26} fill={pale} />
+          <Blob cx={100} cy={162} rx={20} ry={26} curly={curly} bumps={10} amp={3} fill={pale} />
           <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
         </AnimatedG>
 
@@ -362,21 +366,26 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
             anchor={ANCHOR.earLeft}
             animatedProps={earLeftProps}
             length={preset.earLength}
+            curly={curly}
             {...{ fur, line, inner }}
           />
           <Ear
             anchor={ANCHOR.earRight}
             animatedProps={earRightProps}
             length={preset.earLength}
+            curly={curly}
             {...{ fur, line, inner }}
           />
 
           {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
-          <Ellipse
+          <Blob
             cx={ANCHOR.head.x}
             cy={ANCHOR.head.y}
             rx={48}
             ry={42}
+            curly={curly}
+            bumps={14}
+            amp={4.5}
             fill={fur}
             stroke={line}
             strokeWidth={5}
@@ -425,6 +434,8 @@ type EarProps = {
   animatedProps: ReturnType<typeof useAnimatedProps>;
   /** 길이 배율 */
   length: number;
+  /** 곱슬 털이면 덥수룩한 덩어리로 그립니다 */
+  curly: boolean;
   fur: string;
   line: string;
   inner: string;
@@ -437,21 +448,70 @@ type EarProps = {
  * 타원이 아니라 끝이 좁아지는 잎 모양이라, 세워도 늘어뜨려도 강아지 귀로 읽힙니다.
  * (타원으로 하면 곧게 세웠을 때 토끼가 됩니다.)
  */
-function Ear({ anchor, animatedProps, length, fur, line, inner }: EarProps) {
+function Ear({ anchor, animatedProps, length, curly, fur, line, inner }: EarProps) {
+  // 곱슬 견종은 귀도 덥수룩한 덩어리로 그립니다. 잎 모양을 물결로 만드는 것보다
+  // 귀 축을 따라 부풀린 덩어리를 얹는 쪽이 푸들 귀에 가깝습니다.
+  const height = 42 * length;
+
   return (
     <AnimatedG animatedProps={animatedProps}>
       <G transform={`translate(${anchor.x}, ${anchor.y})`}>
-        <Path
-          d={earPath(length, 1)}
-          fill={fur}
-          stroke={line}
-          strokeWidth={5}
-          strokeLinejoin="round"
-        />
-        <Path d={earPath(length * 0.58, 0.5)} fill={inner} />
+        {curly ? (
+          <>
+            <Path
+              d={curlyEllipse(0, -height * 0.5, 15, height * 0.55, 11, 3.5)}
+              fill={fur}
+              stroke={line}
+              strokeWidth={5}
+              strokeLinejoin="round"
+            />
+            <Path
+              d={curlyEllipse(0, -height * 0.5, 7, height * 0.3, 8, 2)}
+              fill={inner}
+              strokeLinejoin="round"
+            />
+          </>
+        ) : (
+          <>
+            <Path
+              d={earPath(length, 1)}
+              fill={fur}
+              stroke={line}
+              strokeWidth={5}
+              strokeLinejoin="round"
+            />
+            <Path d={earPath(length * 0.58, 0.5)} fill={inner} />
+          </>
+        )}
       </G>
     </AnimatedG>
   );
+}
+
+type BlobProps = {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  /** true면 윤곽이 물결칩니다 */
+  curly: boolean;
+  /** 곱슬일 때 물결 개수와 깊이 */
+  bumps?: number;
+  amp?: number;
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+};
+
+/**
+ * 몸통·머리처럼 둥근 덩어리 하나.
+ * 털 질감에 따라 매끈한 타원이거나 곱슬 윤곽입니다.
+ */
+function Blob({ cx, cy, rx, ry, curly, bumps = 13, amp = 4, ...paint }: BlobProps) {
+  if (!curly) {
+    return <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...paint} />;
+  }
+  return <Path d={curlyEllipse(cx, cy, rx, ry, bumps, amp)} strokeLinejoin="round" {...paint} />;
 }
 
 /** 눈 하나. 뜬 정도에 따라 동그란 눈 ↔ 감은 선으로 바뀝니다. */
@@ -535,6 +595,45 @@ function FacePattern({ pattern, tone }: { pattern: BreedPreset['furPattern']; to
 /* ------------------------------------------------------------------ *
  * 계산 유틸
  * ------------------------------------------------------------------ */
+
+/**
+ * 곱슬 털 윤곽.
+ *
+ * 타원 둘레를 bumps개로 나눈 뒤, 각 구간을 바깥으로 부풀린 곡선으로 잇습니다.
+ * 결과적으로 구름처럼 물결치는 실루엣이 나옵니다.
+ *
+ * bumps가 많을수록 잔잔하고, amp가 클수록 덥수룩해집니다.
+ */
+function curlyEllipse(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  bumps: number,
+  amp: number,
+): string {
+  const points: [number, number][] = [];
+  for (let i = 0; i < bumps; i++) {
+    const angle = (i / bumps) * Math.PI * 2;
+    points.push([cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry]);
+  }
+
+  let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
+  for (let i = 0; i < bumps; i++) {
+    const [x2, y2] = points[(i + 1) % bumps];
+    const [x1, y1] = points[i];
+    // 두 점의 중점을 중심 바깥으로 밀어 조절점으로 씁니다.
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2;
+    const dx = mx - cx;
+    const dy = my - cy;
+    const dist = Math.hypot(dx, dy) || 1;
+    const px = mx + (dx / dist) * amp;
+    const py = my + (dy / dist) * amp;
+    d += ` Q ${px.toFixed(2)} ${py.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+  }
+  return `${d} Z`;
+}
 
 /**
  * 귀 윤곽. 뿌리(0,0)에서 위로 뻗고 끝으로 갈수록 좁아집니다.
