@@ -1,0 +1,16 @@
+# 줄바꿈을 저장소 안에서는 LF로 통일합니다.
+# 이게 없으면 Windows(CRLF)와 Mac(LF) 팀원 사이에서
+# "한 줄도 안 고쳤는데 파일 전체가 바뀐 것으로 보이는" 상황이 생깁니다.
+* text=auto eol=lf
+
+# 바이너리는 건드리지 않기
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.ico binary
+*.hbc binary
