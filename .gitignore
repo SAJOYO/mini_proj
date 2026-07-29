@@ -1,0 +1,54 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# 이 프로젝트는 npm만 씁니다.
+# yarn/pnpm/bun으로 설치하면 package-lock.json과 다른 버전이 깔려서
+# "나는 되는데 너는 안 되는" 상황이 생깁니다. 락 파일이 섞이지 않게 막아둡니다.
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+bun.lock
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+# API 키는 절대 커밋하지 마세요. .env.example만 올립니다.
+.env
+.env.*
+!.env.example
+
+# typescript
+*.tsbuildinfo
+
+example
+
+# generated native folders
+/ios
+/android
