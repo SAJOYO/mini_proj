@@ -30,7 +30,16 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
  * 오징어" 같은 어색함이 애초에 생기지 않습니다.
  */
 
-export const SCENE_KINDS = ['room', 'water', 'neutral'] as const;
+export const SCENE_KINDS = [
+  'room', // 방 — 반려 포유류 (강아지·고양이·토끼·햄스터)
+  'savanna', // 초원 — 야생 대형 포유류 (사자·기린·코끼리)
+  'forest', // 숲 — 숲/산 포유류 (사슴·곰·여우·다람쥐)
+  'desert', // 사막 — 건조지 동물 (낙타·사막여우)
+  'sky', // 하늘 — 조류 (참새·앵무새·비둘기)
+  'water', // 물속 — 수중 동물 (물고기 등)
+  'polar', // 극지 — 바다에 빙하 (펭귄·북극곰·북극여우)
+  'neutral', // 뉴트럴 — 애매하거나 전용 씬이 없을 때의 fallback
+] as const;
 export type SceneKind = (typeof SCENE_KINDS)[number];
 
 /** 아직 전용 씬을 못 정했을 때 쓸 기본 씬. */
@@ -93,9 +102,24 @@ export function Scene({ kind = DEFAULT_SCENE, children, style }: SceneProps) {
 type BackdropProps = { kind: SceneKind; w: number; h: number; dark: boolean };
 
 function Backdrop({ kind, w, h, dark }: BackdropProps) {
-  if (kind === 'room') return <RoomScene w={w} h={h} dark={dark} />;
-  if (kind === 'water') return <WaterScene w={w} h={h} dark={dark} />;
-  return <NeutralScene w={w} h={h} dark={dark} />;
+  switch (kind) {
+    case 'room':
+      return <RoomScene w={w} h={h} dark={dark} />;
+    case 'savanna':
+      return <SavannaScene w={w} h={h} dark={dark} />;
+    case 'forest':
+      return <ForestScene w={w} h={h} dark={dark} />;
+    case 'desert':
+      return <DesertScene w={w} h={h} dark={dark} />;
+    case 'sky':
+      return <SkyScene w={w} h={h} dark={dark} />;
+    case 'water':
+      return <WaterScene w={w} h={h} dark={dark} />;
+    case 'polar':
+      return <PolarScene w={w} h={h} dark={dark} />;
+    default:
+      return <NeutralScene w={w} h={h} dark={dark} />;
+  }
 }
 
 /** 방 — 벽 + 바닥 + 러그 + 창문. 잡동사니 없이 분위기만. */
@@ -232,6 +256,209 @@ function WaterScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
         fill={c.weed}
         opacity={0.75}
       />
+    </G>
+  );
+}
+
+/** 초원(세렝게티) — 하늘 + 금빛 초지 + 아카시아 한 그루 + 해. 단순하게 분위기만. */
+function SavannaScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
+  const gid = `savanna-${useId()}`;
+  const c = dark
+    ? { skyTop: '#3B2A44', skyBot: '#7A4A3A', ground: '#4A3A22', sun: '#C97A4A', tree: '#1E160F' }
+    : { skyTop: '#BFE3EF', skyBot: '#F3DDA6', ground: '#D9B36A', sun: '#F6C35A', tree: '#7A5A34' };
+  const gy = h * 0.7;
+  return (
+    <G>
+      <Defs>
+        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={c.skyTop} />
+          <Stop offset="1" stopColor={c.skyBot} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} fill={`url(#${gid})`} />
+      <Circle cx={w * 0.74} cy={h * 0.26} r={w * 0.09} fill={c.sun} opacity={0.9} />
+      <Rect x={0} y={gy} width={w} height={h - gy} fill={c.ground} />
+      {/* 아카시아 — 가는 줄기 + 납작한 우산형 수관 */}
+      <Rect x={w * 0.2 - 3} y={gy - h * 0.22} width={6} height={h * 0.22} fill={c.tree} />
+      <Ellipse cx={w * 0.2} cy={gy - h * 0.24} rx={w * 0.16} ry={h * 0.05} fill={c.tree} />
+    </G>
+  );
+}
+
+/** 숲 — 초록 그라데이션 + 나무 줄기 몇 개 + 바닥. 사슴·곰·여우 같은 숲 동물용. */
+function ForestScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
+  const gid = `forest-${useId()}`;
+  const c = dark
+    ? { top: '#1B3320', bot: '#0C160F', trunk: '#2A1E14', ground: '#14100A', canopy: '#22301C' }
+    : { top: '#CDE9C0', bot: '#8FB57A', trunk: '#7A5636', ground: '#6E5236', canopy: '#8CC178' };
+  const gy = h * 0.78;
+  const trunk = (x: number, ww: number) => (
+    <Rect key={x} x={x} y={h * 0.2} width={ww} height={gy - h * 0.2} fill={c.trunk} opacity={0.9} />
+  );
+  return (
+    <G>
+      <Defs>
+        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={c.top} />
+          <Stop offset="1" stopColor={c.bot} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} fill={`url(#${gid})`} />
+      {/* 위쪽 나뭇잎 덩어리 */}
+      <Ellipse
+        cx={w * 0.25}
+        cy={h * 0.12}
+        rx={w * 0.3}
+        ry={h * 0.12}
+        fill={c.canopy}
+        opacity={0.7}
+      />
+      <Ellipse
+        cx={w * 0.8}
+        cy={h * 0.1}
+        rx={w * 0.28}
+        ry={h * 0.11}
+        fill={c.canopy}
+        opacity={0.7}
+      />
+      {trunk(w * 0.14, w * 0.05)}
+      {trunk(w * 0.82, w * 0.06)}
+      <Rect x={0} y={gy} width={w} height={h - gy} fill={c.ground} />
+    </G>
+  );
+}
+
+/** 사막 — 모래언덕 + 피라미드 + 해. 낙타·사막여우 같은 건조지 동물용. */
+function DesertScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
+  const gid = `desert-${useId()}`;
+  const c = dark
+    ? {
+        skyTop: '#232145',
+        skyBot: '#4A3A57',
+        sand: '#5A4A34',
+        dune: '#4A3B28',
+        pyramid: '#3A2E20',
+        sun: '#D8D2E0',
+      }
+    : {
+        skyTop: '#F3E1B5',
+        skyBot: '#F7D89A',
+        sand: '#E4C48A',
+        dune: '#D6B074',
+        pyramid: '#C99A5E',
+        sun: '#FBE7B0',
+      };
+  const hz = h * 0.62;
+  return (
+    <G>
+      <Defs>
+        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={c.skyTop} />
+          <Stop offset="1" stopColor={c.skyBot} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} fill={`url(#${gid})`} />
+      <Circle cx={w * 0.75} cy={h * 0.24} r={w * 0.08} fill={c.sun} opacity={0.95} />
+      {/* 피라미드 */}
+      <Path
+        d={`M ${w * 0.2} ${hz} L ${w * 0.36} ${hz - h * 0.26} L ${w * 0.52} ${hz} Z`}
+        fill={c.pyramid}
+      />
+      {/* 모래 지평선 + 앞쪽 언덕 */}
+      <Rect x={0} y={hz} width={w} height={h - hz} fill={c.sand} />
+      <Ellipse cx={w * 0.7} cy={h} rx={w * 0.6} ry={h * 0.22} fill={c.dune} />
+    </G>
+  );
+}
+
+/** 하늘 — 하늘색 그라데이션 + 구름 + 앞쪽에 잎 달린 나뭇가지(횃대). 조류용. */
+function SkyScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
+  const gid = `sky-${useId()}`;
+  const c = dark
+    ? {
+        top: '#0E1730',
+        bot: '#243458',
+        cloud: '#3A4A6A',
+        branch: '#2A1E14',
+        leaf: '#22402A',
+        orb: '#E8ECF5',
+      }
+    : {
+        top: '#8FC6EE',
+        bot: '#DCEFFB',
+        cloud: '#FFFFFF',
+        branch: '#7A5636',
+        leaf: '#7FBF74',
+        orb: '#FCEFA0',
+      };
+  const by = h * 0.72;
+  return (
+    <G>
+      <Defs>
+        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={c.top} />
+          <Stop offset="1" stopColor={c.bot} />
+        </LinearGradient>
+      </Defs>
+      <Rect x={0} y={0} width={w} height={h} fill={`url(#${gid})`} />
+      {/* 해 또는 달 */}
+      <Circle cx={w * 0.78} cy={h * 0.2} r={w * 0.07} fill={c.orb} opacity={0.9} />
+      {/* 구름 */}
+      <Ellipse
+        cx={w * 0.28}
+        cy={h * 0.3}
+        rx={w * 0.16}
+        ry={h * 0.055}
+        fill={c.cloud}
+        opacity={0.85}
+      />
+      <Ellipse
+        cx={w * 0.4}
+        cy={h * 0.28}
+        rx={w * 0.1}
+        ry={h * 0.045}
+        fill={c.cloud}
+        opacity={0.85}
+      />
+      {/* 잎 달린 나뭇가지 — 캐릭터가 앉는 횃대 */}
+      <Rect x={0} y={by} width={w} height={Math.max(6, h * 0.028)} rx={4} fill={c.branch} />
+      <Ellipse cx={w * 0.16} cy={by - h * 0.02} rx={w * 0.05} ry={h * 0.03} fill={c.leaf} />
+      <Ellipse cx={w * 0.84} cy={by - h * 0.02} rx={w * 0.055} ry={h * 0.032} fill={c.leaf} />
+      <Ellipse cx={w * 0.72} cy={by - h * 0.015} rx={w * 0.04} ry={h * 0.025} fill={c.leaf} />
+    </G>
+  );
+}
+
+/** 극지 — 차가운 하늘색 바다에 빙하가 떠 있는 배경. 펭귄·북극곰·북극여우용. */
+function PolarScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
+  const gid = `polar-${useId()}`;
+  const c = dark
+    ? { sky: '#1A2A38', seaTop: '#173A4A', seaBot: '#0A1E29', ice: '#AEC8D4', iceShade: '#7C97A6' }
+    : { sky: '#DCEFF5', seaTop: '#AFD3E4', seaBot: '#5E93AE', ice: '#F1FAFD', iceShade: '#C6DEE9' };
+  const sea = h * 0.5;
+  return (
+    <G>
+      <Defs>
+        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={c.seaTop} />
+          <Stop offset="1" stopColor={c.seaBot} />
+        </LinearGradient>
+      </Defs>
+      {/* 하늘 + 바다 */}
+      <Rect x={0} y={0} width={w} height={sea} fill={c.sky} />
+      <Rect x={0} y={sea} width={w} height={h - sea} fill={`url(#${gid})`} />
+      {/* 떠 있는 빙하 — 수면 위 삼각 + 수면에 닿는 밑동 */}
+      <Path
+        d={`M ${w * 0.34} ${sea} L ${w * 0.5} ${sea - h * 0.2} L ${w * 0.66} ${sea} Z`}
+        fill={c.ice}
+      />
+      <Path
+        d={`M ${w * 0.34} ${sea} L ${w * 0.5} ${sea - h * 0.2} L ${w * 0.5} ${sea} Z`}
+        fill={c.iceShade}
+        opacity={0.6}
+      />
+      {/* 앞쪽 유빙 */}
+      <Ellipse cx={w * 0.5} cy={h * 0.92} rx={w * 0.42} ry={h * 0.09} fill={c.ice} />
     </G>
   );
 }
