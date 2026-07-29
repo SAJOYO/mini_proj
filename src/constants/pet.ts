@@ -50,7 +50,13 @@ export const DEFAULT_ANIMATION: AnimationName = 'breathe';
 export type BreedPreset = {
   /** 목록·디버그 화면에 보여줄 한글 이름 */
   label: string;
-  /** 귀 각도(도). 음수일수록 쫑긋(시바), 양수일수록 처짐(리트리버) */
+  /**
+   * 귀가 벌어진 각도(도). 0 ~ 170 범위.
+   *   0~30   곧게 섬 (시바)
+   *   30~90  비스듬히 벌어짐
+   *   90~170 아래로 늘어짐 (리트리버·닥스훈트)
+   * 리그에서 귀 뿌리를 축으로 좌우 대칭 회전에 그대로 씁니다.
+   */
   earAngle: number;
   /** 귀 길이 배율. 1이 기본 */
   earLength: number;
@@ -78,7 +84,7 @@ export type BreedPreset = {
  */
 export const NEUTRAL_BREED: BreedPreset = {
   label: '기본',
-  earAngle: 20,
+  earAngle: 45,
   earLength: 1,
   snoutLength: 1,
   tailCurl: 0.5,
@@ -98,7 +104,8 @@ export const BREEDS = {
   shiba: {
     ...NEUTRAL_BREED,
     label: '시바견',
-    earAngle: -25,
+    earAngle: 14,
+    earLength: 0.85,
     tailCurl: 0.9,
     snoutLength: 0.9,
     furColor: '#D89B5A',
@@ -106,8 +113,8 @@ export const BREEDS = {
   retriever: {
     ...NEUTRAL_BREED,
     label: '골든 리트리버',
-    earAngle: 65,
-    earLength: 1.4,
+    earAngle: 142,
+    earLength: 1.25,
     tailCurl: 0.2,
     bodyRatio: 1.15,
     furColor: '#E8C88A',
@@ -115,8 +122,8 @@ export const BREEDS = {
   dachshund: {
     ...NEUTRAL_BREED,
     label: '닥스훈트',
-    earAngle: 70,
-    earLength: 1.5,
+    earAngle: 155,
+    earLength: 1.45,
     snoutLength: 1.5,
     tailCurl: 0.1,
     bodyRatio: 2.1,
@@ -125,8 +132,8 @@ export const BREEDS = {
   poodle: {
     ...NEUTRAL_BREED,
     label: '푸들',
-    earAngle: 55,
-    earLength: 1.2,
+    earAngle: 128,
+    earLength: 1.1,
     snoutLength: 1.1,
     tailCurl: 0.6,
     furColor: '#F0E4D4',
