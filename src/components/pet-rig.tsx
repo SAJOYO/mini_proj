@@ -1,6 +1,16 @@
+import { useEffect, useState } from 'react';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedProps,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { Circle, Ellipse, G, Path, Svg } from 'react-native-svg';
 
-import type { BreedPreset } from '@/constants/pet';
+import type { AnimationName, BreedPreset } from '@/constants/pet';
 
 /**
  * 반려동물 리그(rig) — 부위별로 쪼갠 캐릭터 구조.
@@ -11,16 +21,22 @@ import type { BreedPreset } from '@/constants/pet';
  *
  * 두 가지 입력을 받습니다.
  *   - preset: 품종. "어떻게 생겼는지" (귀 각도, 주둥이 길이, 털색…)
- *   - pose:   자세. "지금 어떤 모양인지" (고개 각도, 눈 뜬 정도, 꼬리 흔들림…)
+ *   - animation: 동작. "지금 어떻게 움직이는지"
  *
  * 품종이 늘어도 애니메이션은 그대로 돕니다. 반대로 애니메이션이 늘어도
  * 품종 프리셋은 손댈 필요가 없습니다. 이 분리가 리그를 쓰는 이유입니다.
  *
+ * 움직임은 react-native-reanimated가 담당합니다. 회전·이동·크기 같은
+ * 연속 변화는 shared value로 UI 스레드에서 돌고, 눈 깜빡임이나 입 모양처럼
+ * 띄엄띄엄 바뀌는 건 일반 state로 둡니다(초당 몇 번뿐이라 부담이 없습니다).
+ *
  * 좌표계는 200x200 고정이고, 바깥에서 size로 확대/축소합니다.
  */
 
+const AnimatedG = Animated.createAnimatedComponent(G);
+
 /* ------------------------------------------------------------------ *
- * 자세(pose) — 애니메이션이 매 프레임 바꾸는 값들
+ * 자세(pose) — 애니메이션이 오가는 값들
  * ------------------------------------------------------------------ */
 
 export type PetPose = {
@@ -34,6 +50,8 @@ export type PetPose = {
   earFlap: number;
   /** 꼬리 흔들기 각도(도) */
   tailWag: number;
+  /** 주둥이 위아래 흔들림(px). 씹는 동작에 씁니다 */
+  muzzleBob: number;
   /** 눈 뜬 정도. 0 = 완전히 감음, 1 = 활짝 */
   eyeOpen: number;
   /** 입 벌린 정도. 0 = 다뭄, 1 = 활짝 */
@@ -47,8 +65,94 @@ export const REST_POSE: PetPose = {
   headTilt: 0,
   earFlap: 0,
   tailWag: 0,
+  muzzleBob: 0,
   eyeOpen: 1,
   mouthOpen: 0,
+};
+
+/* ------------------------------------------------------------------ *
+ * 동작 정의
+ * ------------------------------------------------------------------ */
+
+/** [시작값, 끝값, 편도 시간(ms)] — 이 둘 사이를 계속 왕복합니다. */
+type Channel = readonly [from: number, to: number, ms: number];
+
+type MotionSpec = {
+  bodyLift?: Channel;
+  bodySquash?: Channel;
+  headTilt?: Channel;
+  earFlap?: Channel;
+  tailWag?: Channel;
+  muzzleBob?: Channel;
+  /** 움직이지 않는 값들 */
+  eyeOpen: number;
+  mouthOpen: number;
+  /** 가끔 눈을 깜빡입니다. 자거나 아플 땐 끕니다. */
+  blink?: boolean;
+};
+
+/**
+ * 동작별 움직임.
+ *
+ * 새 동작을 추가할 땐 constants/pet.ts의 ANIMATION_NAMES와 여기 둘 다 채우세요.
+ * 여기 값은 전부 "부위를 얼마나 움직일지"일 뿐, 품종은 전혀 모릅니다.
+ * 그래서 닥스훈트든 푸들이든 같은 동작이 그대로 돕니다.
+ */
+const MOTION: Record<AnimationName, MotionSpec> = {
+  // 평상시 — 숨 쉬듯 아주 느리게
+  breathe: {
+    bodyLift: [0, -4, 1500],
+    bodySquash: [1, 0.975, 1500],
+    eyeOpen: 1,
+    mouthOpen: 0,
+    blink: true,
+  },
+  // 두리번 — 고개를 좌우로
+  lookAround: {
+    headTilt: [-13, 13, 950],
+    earFlap: [-5, 7, 950],
+    eyeOpen: 1,
+    mouthOpen: 0,
+    blink: true,
+  },
+  // 오물오물 — 주둥이를 빠르게
+  chew: {
+    muzzleBob: [0, 4, 180],
+    headTilt: [-2.5, 2.5, 360],
+    eyeOpen: 1,
+    mouthOpen: 0.55,
+    blink: true,
+  },
+  // 하품 — 입을 크게 벌린 채 느리게
+  yawn: {
+    bodyLift: [0, -3, 1700],
+    headTilt: [0, 7, 1700],
+    eyeOpen: 0.25,
+    mouthOpen: 1,
+  },
+  // 수면 — 거의 안 움직임
+  sleep: {
+    bodyLift: [2, 6, 2600],
+    bodySquash: [0.97, 0.94, 2600],
+    earFlap: [10, 14, 2600],
+    eyeOpen: 0,
+    mouthOpen: 0,
+  },
+  // 신남 — 꼬리를 빠르게, 몸도 들썩
+  wagTail: {
+    tailWag: [-32, 10, 240],
+    bodyLift: [0, -5, 480],
+    eyeOpen: 1,
+    mouthOpen: 0.5,
+    blink: true,
+  },
+  // 아픔 — 축 처진 채 아주 느리게
+  droop: {
+    bodyLift: [5, 7, 2800],
+    earFlap: [26, 31, 2800],
+    eyeOpen: 0.45,
+    mouthOpen: 0,
+  },
 };
 
 /* ------------------------------------------------------------------ *
@@ -79,11 +183,93 @@ export type PetRigProps = {
   preset: BreedPreset;
   /** 한 변 길이(px). 내부 좌표계는 200x200으로 고정입니다. */
   size: number;
+  /** 재생할 동작. 계속 반복됩니다. */
+  animation?: AnimationName;
+  /**
+   * 고정 자세. 주면 animation을 무시하고 그 모양으로 멈춥니다.
+   * 개발 미리보기에서 자세 하나하나를 뜯어볼 때 씁니다.
+   */
   pose?: Partial<PetPose>;
 };
 
-export function PetRig({ preset, size, pose }: PetRigProps) {
-  const p: PetPose = { ...REST_POSE, ...pose };
+export function PetRig({ preset, size, animation, pose }: PetRigProps) {
+  const spec = animation ? MOTION[animation] : null;
+  const frozen = pose ? { ...REST_POSE, ...pose } : null;
+
+  const bodyLift = useSharedValue(0);
+  const bodySquash = useSharedValue(1);
+  const headTilt = useSharedValue(0);
+  const earFlap = useSharedValue(0);
+  const tailWag = useSharedValue(0);
+  const muzzleBob = useSharedValue(0);
+
+  // 동작이 바뀌면 모든 채널을 새로 겁니다.
+  useEffect(() => {
+    const channels: [SharedValue<number>, Channel | undefined, number, number][] = [
+      [bodyLift, spec?.bodyLift, REST_POSE.bodyLift, frozen?.bodyLift ?? REST_POSE.bodyLift],
+      [
+        bodySquash,
+        spec?.bodySquash,
+        REST_POSE.bodySquash,
+        frozen?.bodySquash ?? REST_POSE.bodySquash,
+      ],
+      [headTilt, spec?.headTilt, REST_POSE.headTilt, frozen?.headTilt ?? REST_POSE.headTilt],
+      [earFlap, spec?.earFlap, REST_POSE.earFlap, frozen?.earFlap ?? REST_POSE.earFlap],
+      [tailWag, spec?.tailWag, REST_POSE.tailWag, frozen?.tailWag ?? REST_POSE.tailWag],
+      [muzzleBob, spec?.muzzleBob, REST_POSE.muzzleBob, frozen?.muzzleBob ?? REST_POSE.muzzleBob],
+    ];
+
+    for (const [sv, channel, rest, still] of channels) {
+      cancelAnimation(sv);
+
+      // 고정 자세가 있으면 그 값으로 멈춥니다.
+      if (frozen) {
+        sv.value = still;
+        continue;
+      }
+      // 이 동작이 건드리지 않는 부위는 기본값 그대로.
+      if (!channel) {
+        sv.value = rest;
+        continue;
+      }
+      sv.value = channel[0];
+      sv.value = withRepeat(
+        withTiming(channel[1], { duration: channel[2], easing: Easing.inOut(Easing.quad) }),
+        -1,
+        true,
+      );
+    }
+
+    return () => {
+      for (const [sv] of channels) cancelAnimation(sv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animation, pose]);
+
+  // 눈 깜빡임 — 연속 애니메이션이 아니라 가끔 한 번이라 state로 충분합니다.
+  // 끌 때 state를 되돌리지 않고, 아래 eyeOpen 계산에서 blinkEnabled로 걸러냅니다.
+  // (effect 본문에서 setState를 부르면 렌더가 연쇄로 도는 걸 막는 린트 규칙에 걸립니다)
+  const blinkEnabled = !frozen && !!spec?.blink;
+  const [blinking, setBlinking] = useState(false);
+  useEffect(() => {
+    if (!blinkEnabled) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(
+        () => {
+          setBlinking(true);
+          timer = setTimeout(() => {
+            setBlinking(false);
+            schedule();
+          }, 130);
+        },
+        2200 + Math.random() * 2800,
+      );
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [blinkEnabled, animation, pose]);
 
   const fur = preset.furColor;
   const line = shade(fur, -105);
@@ -95,15 +281,48 @@ export function PetRig({ preset, size, pose }: PetRigProps) {
   const muzzleRy = 17 * preset.snoutLength;
   const muzzleCy = 104 + (preset.snoutLength - 1) * 7;
 
-  // 자세가 더해진 최종 각도
-  const earRot = preset.earAngle + p.earFlap;
+  const eyeOpen =
+    blinkEnabled && blinking ? 0 : (frozen?.eyeOpen ?? spec?.eyeOpen ?? REST_POSE.eyeOpen);
+  const mouthOpen = frozen?.mouthOpen ?? spec?.mouthOpen ?? REST_POSE.mouthOpen;
+
+  // 모든 움직임을 표준 SVG transform 문자열로 넘깁니다.
+  // react-native-svg의 translateY/scaleY 같은 개별 prop은 웹에서 DOM 속성으로
+  // 새어 나가 React 경고를 냅니다. transform은 진짜 SVG 속성이라 웹·네이티브 양쪽에서
+  // 똑같이 파싱됩니다.
+  const rootProps = useAnimatedProps(() => ({
+    transform: `translate(0, ${bodyLift.value})`,
+  }));
+  const bodyProps = useAnimatedProps(() => ({
+    transform: `translate(${ANCHOR.body.x}, ${ANCHOR.body.y}) scale(1, ${bodySquash.value}) translate(${-ANCHOR.body.x}, ${-ANCHOR.body.y})`,
+  }));
+  const headProps = useAnimatedProps(() => ({
+    transform: `rotate(${headTilt.value}, ${ANCHOR.neck.x}, ${ANCHOR.neck.y})`,
+  }));
+  const tailProps = useAnimatedProps(() => ({
+    transform: `rotate(${tailWag.value}, ${ANCHOR.tail.x}, ${ANCHOR.tail.y})`,
+  }));
+  const muzzleProps = useAnimatedProps(() => ({
+    transform: `translate(0, ${muzzleBob.value})`,
+  }));
+  const earLeftProps = useAnimatedProps(
+    () => ({
+      transform: `rotate(${-(preset.earAngle + earFlap.value)}, ${ANCHOR.earLeft.x}, ${ANCHOR.earLeft.y})`,
+    }),
+    [preset.earAngle],
+  );
+  const earRightProps = useAnimatedProps(
+    () => ({
+      transform: `rotate(${preset.earAngle + earFlap.value}, ${ANCHOR.earRight.x}, ${ANCHOR.earRight.y})`,
+    }),
+    [preset.earAngle],
+  );
 
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${VIEW} ${VIEW}`}>
       {/* 몸 전체 — 호흡할 때 위아래로 움직이는 최상위 그룹 */}
-      <G transform={`translate(0, ${p.bodyLift})`}>
+      <AnimatedG animatedProps={rootProps}>
         {/* 꼬리: 몸통보다 먼저 그려서 뒤로 보냅니다 */}
-        <G transform={`rotate(${p.tailWag}, ${ANCHOR.tail.x}, ${ANCHOR.tail.y})`}>
+        <AnimatedG animatedProps={tailProps}>
           <Path
             d={tailPath(preset.tailCurl)}
             stroke={fur}
@@ -111,15 +330,14 @@ export function PetRig({ preset, size, pose }: PetRigProps) {
             strokeLinecap="round"
             fill="none"
           />
-        </G>
+        </AnimatedG>
 
         {/* 앞발 */}
         <Ellipse cx={78} cy={188} rx={16} ry={11} fill={pale} stroke={line} strokeWidth={4} />
         <Ellipse cx={122} cy={188} rx={16} ry={11} fill={pale} stroke={line} strokeWidth={4} />
 
         {/* 몸통 */}
-        <G
-          transform={`translate(${ANCHOR.body.x}, ${ANCHOR.body.y}) scale(1, ${p.bodySquash}) translate(${-ANCHOR.body.x}, ${-ANCHOR.body.y})`}>
+        <AnimatedG animatedProps={bodyProps}>
           <Ellipse
             cx={ANCHOR.body.x}
             cy={ANCHOR.body.y}
@@ -132,20 +350,20 @@ export function PetRig({ preset, size, pose }: PetRigProps) {
           {/* 가슴 털 */}
           <Ellipse cx={100} cy={162} rx={20} ry={26} fill={pale} />
           <FurPattern pattern={preset.furPattern} tone={inner} />
-        </G>
+        </AnimatedG>
 
         {/* 머리 — 목을 축으로 갸웃합니다. 귀·눈·코가 전부 이 안에 있습니다. */}
-        <G transform={`rotate(${p.headTilt}, ${ANCHOR.neck.x}, ${ANCHOR.neck.y})`}>
+        <AnimatedG animatedProps={headProps}>
           {/* 귀: 머리보다 먼저 그려서 뒤로 보냅니다 */}
           <Ear
             anchor={ANCHOR.earLeft}
-            rotation={-earRot}
+            animatedProps={earLeftProps}
             length={preset.earLength}
             {...{ fur, line, inner }}
           />
           <Ear
             anchor={ANCHOR.earRight}
-            rotation={earRot}
+            animatedProps={earRightProps}
             length={preset.earLength}
             {...{ fur, line, inner }}
           />
@@ -161,34 +379,32 @@ export function PetRig({ preset, size, pose }: PetRigProps) {
             strokeWidth={5}
           />
 
-          {/* 주둥이 */}
-          <Ellipse
-            cx={100}
-            cy={muzzleCy}
-            rx={28}
-            ry={muzzleRy}
-            fill={pale}
-            stroke={line}
-            strokeWidth={3}
-          />
-
-          {/* 코 */}
-          <Ellipse cx={100} cy={muzzleCy - muzzleRy * 0.5} rx={11} ry={8.5} fill={line} />
-
-          {/* 입 */}
-          <Path
-            d={mouthPath(muzzleCy, muzzleRy, p.mouthOpen)}
-            stroke={line}
-            strokeWidth={3.5}
-            strokeLinecap="round"
-            fill={p.mouthOpen > 0.15 ? shade(fur, -130) : 'none'}
-          />
+          {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
+          <AnimatedG animatedProps={muzzleProps}>
+            <Ellipse
+              cx={100}
+              cy={muzzleCy}
+              rx={28}
+              ry={muzzleRy}
+              fill={pale}
+              stroke={line}
+              strokeWidth={3}
+            />
+            <Ellipse cx={100} cy={muzzleCy - muzzleRy * 0.5} rx={11} ry={8.5} fill={line} />
+            <Path
+              d={mouthPath(muzzleCy, muzzleRy, mouthOpen)}
+              stroke={line}
+              strokeWidth={3.5}
+              strokeLinecap="round"
+              fill={mouthOpen > 0.15 ? shade(fur, -130) : 'none'}
+            />
+          </AnimatedG>
 
           {/* 눈 — eyeOpen이 0에 가까우면 감은 선으로 바뀝니다 */}
-          <Eye cx={80} cy={78} open={p.eyeOpen} line={line} />
-          <Eye cx={120} cy={78} open={p.eyeOpen} line={line} />
-        </G>
-      </G>
+          <Eye cx={80} cy={78} open={eyeOpen} line={line} />
+          <Eye cx={120} cy={78} open={eyeOpen} line={line} />
+        </AnimatedG>
+      </AnimatedG>
     </Svg>
   );
 }
@@ -199,8 +415,8 @@ export function PetRig({ preset, size, pose }: PetRigProps) {
 
 type EarProps = {
   anchor: { x: number; y: number };
-  /** 뿌리를 축으로 한 회전각(도). 0 = 위로 곧게 */
-  rotation: number;
+  /** 뿌리를 축으로 한 회전. 품종 각도 + 펄럭임이 이미 합쳐져 있습니다. */
+  animatedProps: ReturnType<typeof useAnimatedProps>;
   /** 길이 배율 */
   length: number;
   fur: string;
@@ -211,22 +427,24 @@ type EarProps = {
 /**
  * 귀 하나.
  *
- * 뿌리(anchor)로 원점을 옮긴 뒤 그 자리에서 회전합니다.
+ * 뿌리(anchor)를 축으로 회전합니다.
  * 타원이 아니라 끝이 좁아지는 잎 모양이라, 세워도 늘어뜨려도 강아지 귀로 읽힙니다.
  * (타원으로 하면 곧게 세웠을 때 토끼가 됩니다.)
  */
-function Ear({ anchor, rotation, length, fur, line, inner }: EarProps) {
+function Ear({ anchor, animatedProps, length, fur, line, inner }: EarProps) {
   return (
-    <G transform={`translate(${anchor.x}, ${anchor.y}) rotate(${rotation})`}>
-      <Path
-        d={earPath(length, 1)}
-        fill={fur}
-        stroke={line}
-        strokeWidth={5}
-        strokeLinejoin="round"
-      />
-      <Path d={earPath(length * 0.58, 0.5)} fill={inner} />
-    </G>
+    <AnimatedG animatedProps={animatedProps}>
+      <G transform={`translate(${anchor.x}, ${anchor.y})`}>
+        <Path
+          d={earPath(length, 1)}
+          fill={fur}
+          stroke={line}
+          strokeWidth={5}
+          strokeLinejoin="round"
+        />
+        <Path d={earPath(length * 0.58, 0.5)} fill={inner} />
+      </G>
+    </AnimatedG>
   );
 }
 

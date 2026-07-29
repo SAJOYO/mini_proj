@@ -1,32 +1,57 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PetCharacter } from '@/components/pet-character';
-import { Screen } from '@/components/screen';
 import { PetRig, type PetPose } from '@/components/pet-rig';
-import { ANIMATION_NAMES, BREEDS, type BreedId } from '@/constants/pet';
-import { FontSize, Spacing } from '@/constants/theme';
+import { Screen } from '@/components/screen';
+import { ANIMATION_NAMES, BREEDS, type AnimationName, type BreedId } from '@/constants/pet';
+import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
  * 캐릭터 확인용 개발 화면 (`/pet-preview`).
  *
- * 품종별 생김새와 자세(pose) 변화를 한눈에 늘어놓고 눈으로 확인합니다.
+ * 위쪽에서 동작을 눌러가며 움직임을 확인하고,
+ * 아래쪽에서 품종별 생김새와 자세를 한눈에 봅니다.
  * 제품 화면이 아니니 배포 전에 지우거나 개발 빌드에서만 노출하세요.
  */
 export default function PetPreviewScreen() {
   const c = useTheme();
+  const [animation, setAnimation] = useState<AnimationName>('breathe');
+  const [breed, setBreed] = useState<BreedId>('shiba');
+
   const breeds = Object.keys(BREEDS) as BreedId[];
 
   return (
     <Screen scroll>
+      <Text style={[styles.heading, { color: c.text }]}>움직임</Text>
+      <Text style={[styles.note, { color: c.textSecondary }]}>
+        눌러서 동작을 바꿔보세요. 계속 반복 재생됩니다.
+      </Text>
+
+      <View style={styles.stage}>
+        <PetCharacter breed={breed} animation={animation} size={220} />
+      </View>
+
+      <View style={styles.chips}>
+        {ANIMATION_NAMES.map((a) => (
+          <Chip key={a} label={a} active={a === animation} onPress={() => setAnimation(a)} />
+        ))}
+      </View>
+      <View style={styles.chips}>
+        {breeds.map((b) => (
+          <Chip key={b} label={BREEDS[b].label} active={b === breed} onPress={() => setBreed(b)} />
+        ))}
+      </View>
+
       <Text style={[styles.heading, { color: c.text }]}>품종</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
-        같은 리그에 숫자만 바꿔 끼운 결과입니다.
+        같은 리그에 숫자만 바꿔 끼운 결과입니다. 전부 숨 쉬는 중입니다.
       </Text>
       <View style={styles.row}>
         {breeds.map((b) => (
           <View key={b} style={styles.cell}>
-            <PetRig preset={BREEDS[b]} size={130} />
+            <PetRig preset={BREEDS[b]} size={120} animation="breathe" />
             <Text style={[styles.caption, { color: c.text }]}>{BREEDS[b].label}</Text>
           </View>
         ))}
@@ -34,39 +59,46 @@ export default function PetPreviewScreen() {
 
       <Text style={[styles.heading, { color: c.text }]}>자세</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
-        품종은 시바견으로 고정하고 pose만 바꾼 결과입니다.
+        애니메이션을 끄고 pose만 고정한 모습입니다. 부위별로 뜯어볼 때 씁니다.
       </Text>
       <View style={styles.row}>
-        {POSES.map(({ label, pose }) => (
+        {FROZEN_POSES.map(({ label, pose }) => (
           <View key={label} style={styles.cell}>
-            <PetRig preset={BREEDS.shiba} size={130} pose={pose} />
+            <PetRig preset={BREEDS.shiba} size={120} pose={pose} />
             <Text style={[styles.caption, { color: c.text }]}>{label}</Text>
           </View>
-        ))}
-      </View>
-
-      <Text style={[styles.heading, { color: c.text }]}>동작</Text>
-      <Text style={[styles.note, { color: c.textSecondary }]}>
-        게임 쪽에서 넘기는 animation 값이 이렇게 보입니다.
-      </Text>
-      <View style={styles.row}>
-        {ANIMATION_NAMES.map((a) => (
-          <PetCharacter key={a} breed="shiba" animation={a} size={130} debug />
         ))}
       </View>
     </Screen>
   );
 }
 
-const POSES: { label: string; pose: Partial<PetPose> }[] = [
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  const c = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.chip,
+        {
+          backgroundColor: active ? c.primary : 'transparent',
+          borderColor: active ? c.primary : c.border,
+        },
+      ]}>
+      <Text style={[styles.chipText, { color: active ? c.onPrimary : c.textSecondary }]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const FROZEN_POSES: { label: string; pose: Partial<PetPose> }[] = [
   { label: '기본', pose: {} },
   { label: '고개 갸웃', pose: { headTilt: 14 } },
   { label: '귀 처짐', pose: { earFlap: 45 } },
   { label: '눈 감음', pose: { eyeOpen: 0 } },
-  { label: '반쯤 감음', pose: { eyeOpen: 0.4 } },
   { label: '입 벌림', pose: { mouthOpen: 1 } },
   { label: '꼬리 흔들기', pose: { tailWag: -25 } },
-  { label: '납작', pose: { bodySquash: 0.9, bodyLift: 6 } },
 ];
 
 const styles = StyleSheet.create({
@@ -77,6 +109,26 @@ const styles = StyleSheet.create({
   note: {
     fontSize: FontSize.caption,
     marginBottom: Spacing.md,
+  },
+  stage: {
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+  },
+  chipText: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
   },
   row: {
     flexDirection: 'row',
