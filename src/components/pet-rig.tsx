@@ -275,6 +275,9 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
   const line = shade(fur, -105);
   const inner = shade(fur, -55);
   const pale = shade(fur, 45);
+  // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
+  // 무늬가 아니라 때 묻은 자국처럼 보입니다.
+  const patch = shade(fur, -88);
 
   // 품종 숫자를 실제 치수로 변환
   const bodyRx = 44 + (preset.bodyRatio - 1) * 10;
@@ -324,7 +327,7 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
         {/* 꼬리: 몸통보다 먼저 그려서 뒤로 보냅니다 */}
         <AnimatedG animatedProps={tailProps}>
           <Path
-            d={tailPath(preset.tailCurl)}
+            d={tailPath(preset.tailCurl, preset.tailLength)}
             stroke={fur}
             strokeWidth={18}
             strokeLinecap="round"
@@ -349,7 +352,7 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
           />
           {/* 가슴 털 */}
           <Ellipse cx={100} cy={162} rx={20} ry={26} fill={pale} />
-          <FurPattern pattern={preset.furPattern} tone={inner} />
+          <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
         </AnimatedG>
 
         {/* 머리 — 목을 축으로 갸웃합니다. 귀·눈·코가 전부 이 안에 있습니다. */}
@@ -378,6 +381,9 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
             stroke={line}
             strokeWidth={5}
           />
+
+          {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
+          <FacePattern pattern={preset.furPattern} tone={patch} />
 
           {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
           <AnimatedG animatedProps={muzzleProps}>
@@ -469,10 +475,32 @@ function Eye({ cx, cy, open, line }: { cx: number; cy: number; open: number; lin
   );
 }
 
-/** 몸통 위에 얹는 무늬. */
-function FurPattern({ pattern, tone }: { pattern: BreedPreset['furPattern']; tone: string }) {
+/**
+ * 몸통에 얹는 무늬.
+ *
+ * 얼룩(patch)은 등 위쪽에 붙여서 몸통 윤곽을 타게 그립니다.
+ * 몸통 한가운데 띄우면 무늬가 아니라 때 묻은 자국처럼 보입니다.
+ */
+function BodyPattern({
+  pattern,
+  tone,
+  bodyRx,
+}: {
+  pattern: BreedPreset['furPattern'];
+  tone: string;
+  bodyRx: number;
+}) {
   if (pattern === 'patch') {
-    return <Ellipse cx={70} cy={140} rx={17} ry={20} fill={tone} opacity={0.55} />;
+    return (
+      <Ellipse
+        cx={100 - bodyRx * 0.42}
+        cy={132}
+        rx={bodyRx * 0.5}
+        ry={22}
+        fill={tone}
+        opacity={0.85}
+      />
+    );
   }
   if (pattern === 'spotted') {
     return (
@@ -484,6 +512,24 @@ function FurPattern({ pattern, tone }: { pattern: BreedPreset['furPattern']; ton
     );
   }
   return null;
+}
+
+/**
+ * 얼굴 무늬.
+ *
+ * 한쪽 눈을 덮는 얼룩은 강아지 무늬 중 제일 알아보기 쉽습니다.
+ * 머리통 다음, 눈보다 먼저 그려야 눈이 무늬 위에 얹힙니다.
+ */
+function FacePattern({ pattern, tone }: { pattern: BreedPreset['furPattern']; tone: string }) {
+  if (pattern !== 'patch') return null;
+  return (
+    <G opacity={0.85}>
+      {/* 왼쪽 눈을 덮는 얼룩 */}
+      <Ellipse cx={76} cy={74} rx={22} ry={20} fill={tone} />
+      {/* 귀 쪽으로 이어지는 부분 */}
+      <Ellipse cx={64} cy={60} rx={14} ry={13} fill={tone} />
+    </G>
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -508,14 +554,17 @@ function earPath(len: number, widthScale: number): string {
 /**
  * 꼬리 곡선.
  * curl 0 = 아래로 축 처짐, 1 = 등 위로 완전히 말림.
+ * len  1 = 기본 길이, 0.4 = 코기처럼 뭉툭하게 짧음.
  */
-function tailPath(curl: number): string {
+function tailPath(curl: number, len: number): string {
   const { x, y } = ANCHOR.tail;
   const cx = 168 + 14 * curl;
   const cy = 184 - 58 * curl;
   const ex = 170 - 20 * curl;
   const ey = 202 - 96 * curl;
-  return `M ${x} ${y} Q ${cx} ${cy} ${ex} ${ey}`;
+  // 길이 배율만큼 조절점과 끝점을 뿌리 쪽으로 당깁니다.
+  const pull = (from: number, to: number) => from + (to - from) * len;
+  return `M ${x} ${y} Q ${pull(x, cx)} ${pull(y, cy)} ${pull(x, ex)} ${pull(y, ey)}`;
 }
 
 /** 입. 다물면 곡선 하나, 벌리면 타원에 가까운 닫힌 path. */

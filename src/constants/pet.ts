@@ -64,6 +64,8 @@ export type BreedPreset = {
   snoutLength: number;
   /** 꼬리 말림 정도. 0 = 축 처짐, 1 = 등 위로 완전히 말림 */
   tailCurl: number;
+  /** 꼬리 길이 배율. 1 = 기본, 0.4 = 코기처럼 뭉툭하게 짧음 */
+  tailLength: number;
   /** 몸통 가로/세로 비율. 클수록 닥스훈트처럼 길쭉해집니다 */
   bodyRatio: number;
   /** 기본 털색 */
@@ -88,6 +90,7 @@ export const NEUTRAL_BREED: BreedPreset = {
   earLength: 1,
   snoutLength: 1,
   tailCurl: 0.5,
+  tailLength: 1,
   bodyRatio: 1,
   furColor: '#C9A227',
   furPattern: 'solid',
@@ -137,7 +140,55 @@ export const BREEDS = {
     snoutLength: 1.1,
     tailCurl: 0.6,
     furColor: '#F0E4D4',
+    furPattern: 'solid',
+  },
+  beagle: {
+    ...NEUTRAL_BREED,
+    label: '비글',
+    earAngle: 148,
+    earLength: 1.3,
+    snoutLength: 1.15,
+    tailCurl: 0.55,
+    bodyRatio: 1.05,
+    furColor: '#C98A4B',
+    // 비글은 실제로 얼굴·몸에 진한 얼룩이 있습니다
     furPattern: 'patch',
+  },
+  shihtzu: {
+    ...NEUTRAL_BREED,
+    label: '시츄',
+    earAngle: 135,
+    earLength: 1.3,
+    // 코가 눌린 견종이라 주둥이가 아주 짧습니다
+    snoutLength: 0.55,
+    tailCurl: 0.85,
+    furColor: '#E3C79A',
+    furPattern: 'patch',
+  },
+  maltese: {
+    ...NEUTRAL_BREED,
+    label: '말티즈',
+    earAngle: 130,
+    earLength: 1.2,
+    snoutLength: 0.75,
+    tailCurl: 0.8,
+    bodyRatio: 0.95,
+    furColor: '#F2EDE4',
+    furPattern: 'solid',
+  },
+  corgi: {
+    ...NEUTRAL_BREED,
+    label: '웰시코기',
+    // 크고 곧게 선 귀가 코기의 특징입니다
+    earAngle: 10,
+    earLength: 1.15,
+    snoutLength: 1,
+    tailCurl: 0.3,
+    // 꼬리가 뭉툭하게 짧습니다
+    tailLength: 0.4,
+    bodyRatio: 1.5,
+    furColor: '#D98F4F',
+    furPattern: 'solid',
   },
 } as const satisfies Record<string, BreedPreset>;
 
