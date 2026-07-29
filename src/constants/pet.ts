@@ -334,6 +334,28 @@ export const BREEDS = {
     furColor: '#C3AE93',
     furPattern: 'solid',
   },
+
+  /* --- 닮은꼴 실험: 배우 박보영의 강아지상 --- */
+
+  // 카발리에 킹 찰스 스패니얼 — 크고 동그란 눈망울, 둥근 얼굴, 부드럽게 늘어진
+  // 깃털 귀의 대표적인 "강아지상". 박보영의 둥근 얼굴·큰 눈·순하고 사랑스러운
+  // 인상에 맞춰 고른 품종입니다(실제 사진 대조가 아니라 강아지상 통설 기반의 임의 선정).
+  cavalier: {
+    ...NEUTRAL_BREED,
+    label: '카발리에',
+    group: 9,
+    // 얼굴 옆으로 길고 부드럽게 늘어진 깃털 귀
+    earAngle: 145,
+    earLength: 1.35,
+    // 짧고 귀여운 주둥이 — 코가 짧을수록 눈이 더 커 보여 동안이 됩니다
+    snoutLength: 0.7,
+    tailCurl: 0.4,
+    // 작고 동그란 토이 스패니얼
+    bodyRatio: 0.95,
+    // 루비 컬러 — 따뜻한 밤색 단색
+    furColor: '#B5713F',
+    furPattern: 'solid',
+  },
 } as const satisfies Record<string, BreedPreset>;
 
 export type BreedId = keyof typeof BREEDS;
