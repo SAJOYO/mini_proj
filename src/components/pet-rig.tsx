@@ -10,7 +10,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Circle, Ellipse, G, Path, Svg } from 'react-native-svg';
 
-import type { AnimationName, BreedPreset } from '@/constants/pet';
+import {
+  NEUTRAL_STAGE,
+  type AnimationName,
+  type BreedPreset,
+  type StageModifier,
+} from '@/constants/pet';
 
 /**
  * 반려동물 리그(rig) — 부위별로 쪼갠 캐릭터 구조.
@@ -181,6 +186,11 @@ const ANCHOR = {
 
 export type PetRigProps = {
   preset: BreedPreset;
+  /**
+   * 생애 단계 보정. 품종 위에 나이에 따른 형태 변화를 얹습니다.
+   * 없으면 다 큰 청년(무보정)으로 그립니다.
+   */
+  stage?: StageModifier;
   /** 한 변 길이(px). 내부 좌표계는 200x200으로 고정입니다. */
   size: number;
   /** 재생할 동작. 계속 반복됩니다. */
@@ -192,7 +202,7 @@ export type PetRigProps = {
   pose?: Partial<PetPose>;
 };
 
-export function PetRig({ preset, size, animation, pose }: PetRigProps) {
+export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }: PetRigProps) {
   const spec = animation ? MOTION[animation] : null;
   const frozen = pose ? { ...REST_POSE, ...pose } : null;
 
@@ -271,22 +281,45 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
     return () => clearTimeout(timer);
   }, [blinkEnabled, animation, pose]);
 
-  const fur = preset.furColor;
+  // 노년일수록 털이 희끗해집니다. 회색 쪽으로 살짝 섞되, 품종 색이
+  // 알아볼 수 없을 만큼 지우지는 않습니다.
+  const fur = fade(preset.furColor, stage.furFade);
   const line = shade(fur, -105);
   const inner = shade(fur, -55);
   const pale = shade(fur, 45);
   // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
   // 무늬가 아니라 때 묻은 자국처럼 보입니다.
   const patch = shade(fur, -88);
+  // 노년은 눈동자가 뿌옇게 흐려집니다. 외곽선 색을 회청색 쪽으로 섞습니다.
+  const eyeColor = mix(line, '#8FA0A6', stage.eyeCloudiness);
   const curly = preset.furTexture === 'curly';
 
-  // 품종 숫자를 실제 치수로 변환
-  const bodyRx = 44 + (preset.bodyRatio - 1) * 10;
+  // 품종·단계 숫자를 실제 치수로 변환
+  const bodyScale = stage.bodyScale;
+  const bodyRx = (44 + (preset.bodyRatio - 1) * 10) * bodyScale;
+  const bodyRy = 42 * bodyScale;
   const muzzleRy = 17 * preset.snoutLength;
   const muzzleCy = 104 + (preset.snoutLength - 1) * 7;
 
-  const eyeOpen =
+  // 발은 아기·청소년일수록 유난히 큽니다. 바닥선(≈199)을 유지하도록
+  // 커진 만큼 중심을 위로 올려, 발이 뷰박스 밖으로 삐져나가지 않게 합니다.
+  const pawRx = 16 * stage.pawScale;
+  const pawRy = 11 * stage.pawScale;
+  const pawCy = 199 - pawRy;
+
+  // 귀는 품종 각도에 단계 처짐을 더하고, 길이에 단계 배율을 곱합니다.
+  // (아기는 품종과 무관하게 귀가 작고 쳐지고, 노년은 살짝 처집니다.)
+  const earAngle = Math.max(0, Math.min(170, preset.earAngle + stage.earDroop));
+  const earLength = preset.earLength * stage.earScale;
+
+  // 머리 크기 배율. 아기는 머리가 커서 뽀짝합니다. 머리 중심을 축으로
+  // 귀·눈·주둥이까지 통째로 키우거나 줄입니다.
+  const headScale = stage.headScale;
+
+  const rawEyeOpen =
     blinkEnabled && blinking ? 0 : (frozen?.eyeOpen ?? spec?.eyeOpen ?? REST_POSE.eyeOpen);
+  // 아기는 눈을 다 못 뜨고, 노년은 눈이 조금 처집니다. 단계별 최대치로 눌러줍니다.
+  const eyeOpen = Math.min(rawEyeOpen, stage.eyeOpenMax);
   const mouthOpen = frozen?.mouthOpen ?? spec?.mouthOpen ?? REST_POSE.mouthOpen;
 
   // 모든 움직임을 표준 SVG transform 문자열로 넘깁니다.
@@ -310,15 +343,15 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
   }));
   const earLeftProps = useAnimatedProps(
     () => ({
-      transform: `rotate(${-(preset.earAngle + earFlap.value)}, ${ANCHOR.earLeft.x}, ${ANCHOR.earLeft.y})`,
+      transform: `rotate(${-(earAngle + earFlap.value)}, ${ANCHOR.earLeft.x}, ${ANCHOR.earLeft.y})`,
     }),
-    [preset.earAngle],
+    [earAngle],
   );
   const earRightProps = useAnimatedProps(
     () => ({
-      transform: `rotate(${preset.earAngle + earFlap.value}, ${ANCHOR.earRight.x}, ${ANCHOR.earRight.y})`,
+      transform: `rotate(${earAngle + earFlap.value}, ${ANCHOR.earRight.x}, ${ANCHOR.earRight.y})`,
     }),
-    [preset.earAngle],
+    [earAngle],
   );
 
   return (
@@ -336,9 +369,25 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
           />
         </AnimatedG>
 
-        {/* 앞발 */}
-        <Ellipse cx={78} cy={188} rx={16} ry={11} fill={pale} stroke={line} strokeWidth={4} />
-        <Ellipse cx={122} cy={188} rx={16} ry={11} fill={pale} stroke={line} strokeWidth={4} />
+        {/* 앞발 — 아기·청소년은 발이 큼직합니다 */}
+        <Ellipse
+          cx={78}
+          cy={pawCy}
+          rx={pawRx}
+          ry={pawRy}
+          fill={pale}
+          stroke={line}
+          strokeWidth={4}
+        />
+        <Ellipse
+          cx={122}
+          cy={pawCy}
+          rx={pawRx}
+          ry={pawRy}
+          fill={pale}
+          stroke={line}
+          strokeWidth={4}
+        />
 
         {/* 몸통 */}
         <AnimatedG animatedProps={bodyProps}>
@@ -346,7 +395,7 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
             cx={ANCHOR.body.x}
             cy={ANCHOR.body.y}
             rx={bodyRx}
-            ry={42}
+            ry={bodyRy}
             curly={curly}
             bumps={16}
             amp={4.5}
@@ -355,69 +404,84 @@ export function PetRig({ preset, size, animation, pose }: PetRigProps) {
             strokeWidth={5}
           />
           {/* 가슴 털 */}
-          <Blob cx={100} cy={162} rx={20} ry={26} curly={curly} bumps={10} amp={3} fill={pale} />
+          <Blob
+            cx={100}
+            cy={162}
+            rx={20 * bodyScale}
+            ry={26 * bodyScale}
+            curly={curly}
+            bumps={10}
+            amp={3}
+            fill={pale}
+          />
           <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
         </AnimatedG>
 
         {/* 머리 — 목을 축으로 갸웃합니다. 귀·눈·코가 전부 이 안에 있습니다. */}
         <AnimatedG animatedProps={headProps}>
-          {/* 귀: 머리보다 먼저 그려서 뒤로 보냅니다 */}
-          <Ear
-            anchor={ANCHOR.earLeft}
-            animatedProps={earLeftProps}
-            length={preset.earLength}
-            curly={curly}
-            {...{ fur, line, inner }}
-          />
-          <Ear
-            anchor={ANCHOR.earRight}
-            animatedProps={earRightProps}
-            length={preset.earLength}
-            curly={curly}
-            {...{ fur, line, inner }}
-          />
-
-          {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
-          <Blob
-            cx={ANCHOR.head.x}
-            cy={ANCHOR.head.y}
-            rx={48}
-            ry={42}
-            curly={curly}
-            bumps={14}
-            amp={4.5}
-            fill={fur}
-            stroke={line}
-            strokeWidth={5}
-          />
-
-          {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
-          <FacePattern pattern={preset.furPattern} tone={patch} />
-
-          {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
-          <AnimatedG animatedProps={muzzleProps}>
-            <Ellipse
-              cx={100}
-              cy={muzzleCy}
-              rx={28}
-              ry={muzzleRy}
-              fill={pale}
-              stroke={line}
-              strokeWidth={3}
+          {/* 단계별 머리 크기 — 머리 중심을 축으로 얼굴 전체를 키우거나 줄입니다.
+              (아기는 머리가 크고, 청소년은 살짝 작습니다.) */}
+          <G
+            transform={`translate(${ANCHOR.head.x}, ${ANCHOR.head.y}) scale(${headScale}) translate(${-ANCHOR.head.x}, ${-ANCHOR.head.y})`}>
+            {/* 귀: 머리보다 먼저 그려서 뒤로 보냅니다 */}
+            <Ear
+              anchor={ANCHOR.earLeft}
+              animatedProps={earLeftProps}
+              length={earLength}
+              curly={curly}
+              {...{ fur, line, inner }}
             />
-            <Ellipse cx={100} cy={muzzleCy - muzzleRy * 0.5} rx={11} ry={8.5} fill={line} />
-            <Path
-              d={mouthPath(muzzleCy, muzzleRy, mouthOpen)}
-              stroke={line}
-              strokeWidth={3.5}
-              strokeLinecap="round"
-              fill={mouthOpen > 0.15 ? shade(fur, -130) : 'none'}
+            <Ear
+              anchor={ANCHOR.earRight}
+              animatedProps={earRightProps}
+              length={earLength}
+              curly={curly}
+              {...{ fur, line, inner }}
             />
-          </AnimatedG>
 
-          {/* 눈 — eyeOpen이 0에 가까우면 감은 선으로 바뀝니다 */}
-          <Eye cx={80} cy={78} open={eyeOpen} line={line} />
-          <Eye cx={120} cy={78} open={eyeOpen} line={line} />
+            {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
+            <Blob
+              cx={ANCHOR.head.x}
+              cy={ANCHOR.head.y}
+              rx={48}
+              ry={42}
+              curly={curly}
+              bumps={14}
+              amp={4.5}
+              fill={fur}
+              stroke={line}
+              strokeWidth={5}
+            />
+
+            {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
+            <FacePattern pattern={preset.furPattern} tone={patch} />
+
+            {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
+            <AnimatedG animatedProps={muzzleProps}>
+              <Ellipse
+                cx={100}
+                cy={muzzleCy}
+                rx={28}
+                ry={muzzleRy}
+                fill={pale}
+                stroke={line}
+                strokeWidth={3}
+              />
+              <Ellipse cx={100} cy={muzzleCy - muzzleRy * 0.5} rx={11} ry={8.5} fill={line} />
+              <Path
+                d={mouthPath(muzzleCy, muzzleRy, mouthOpen)}
+                stroke={line}
+                strokeWidth={3.5}
+                strokeLinecap="round"
+                fill={mouthOpen > 0.15 ? shade(fur, -130) : 'none'}
+              />
+            </AnimatedG>
+
+            {/* 눈 — eyeOpen이 0에 가까우면 감은 선으로 바뀝니다.
+                노년은 eyeColor가 뿌옇게 흐려집니다. */}
+            <Eye cx={80} cy={78} open={eyeOpen} line={eyeColor} />
+            <Eye cx={120} cy={78} open={eyeOpen} line={eyeColor} />
+          </G>
         </AnimatedG>
       </AnimatedG>
     </Svg>
@@ -687,4 +751,31 @@ function shade(hex: string, amount: number): string {
   const g = clamp(((n >> 8) & 255) + amount);
   const b = clamp((n & 255) + amount);
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+/** 두 16진 색을 t(0~1)만큼 섞습니다. t=0이면 a, t=1이면 b. */
+function mix(a: string, b: string, t: number): string {
+  const parse = (c: string) => {
+    // rgb(...) 문자열도, #RRGGBB 도 모두 받습니다.
+    const m = c.match(/\d+/g);
+    if (c.startsWith('#')) {
+      const n = parseInt(c.replace('#', ''), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    return m ? m.slice(0, 3).map(Number) : [0, 0, 0];
+  };
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const k = Math.max(0, Math.min(1, t));
+  const lerp = (x: number, y: number) => Math.round(x + (y - x) * k);
+  return `rgb(${lerp(ar, br)}, ${lerp(ag, bg)}, ${lerp(ab, bb)})`;
+}
+
+/**
+ * 나이 들며 털이 희끗해지는 정도.
+ * amount가 0이면 원래 털색, 1에 가까울수록 흐린 회백색으로 바랩니다.
+ * 품종 색이 아예 지워지지 않도록 최대 섞임을 절반 정도로 눌러 둡니다.
+ */
+function fade(hex: string, amount: number): string {
+  return mix(hex, '#D8D3CA', amount * 0.5);
 }

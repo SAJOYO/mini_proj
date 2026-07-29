@@ -199,6 +199,34 @@ export const BREEDS = {
     furColor: '#D98F4F',
     furPattern: 'solid',
   },
+  chihuahua: {
+    ...NEUTRAL_BREED,
+    label: '치와와',
+    // 몸에 비해 큼직하고 쫑긋 선 귀가 치와와의 상징입니다
+    earAngle: 20,
+    earLength: 1.4,
+    // 코가 짧고 이마가 동그란 애플헤드
+    snoutLength: 0.6,
+    tailCurl: 0.5,
+    // 품종 중 가장 작아서 몸통을 좁게 잡습니다
+    bodyRatio: 0.82,
+    furColor: '#E4C08A',
+    furPattern: 'solid',
+  },
+  bichon: {
+    ...NEUTRAL_BREED,
+    label: '비숑프리제',
+    // 귀가 복슬복슬한 털에 파묻혀 아래로 처져 보입니다
+    earAngle: 122,
+    earLength: 1,
+    snoutLength: 0.75,
+    tailCurl: 0.7,
+    bodyRatio: 1,
+    // 새하얗고 둥근 곱슬 솜뭉치
+    furColor: '#F7F3EC',
+    furPattern: 'solid',
+    furTexture: 'curly',
+  },
 } as const satisfies Record<string, BreedPreset>;
 
 export type BreedId = keyof typeof BREEDS;
@@ -209,4 +237,110 @@ export const DEFAULT_BREED: BreedId = 'neutral';
 /** 알 수 없는 품종 문자열이 들어와도 앱이 죽지 않게 걸러줍니다. */
 export function resolveBreed(id: string | null | undefined): BreedId {
   return id != null && id in BREEDS ? (id as BreedId) : DEFAULT_BREED;
+}
+
+/* ------------------------------------------------------------------ *
+ * 생애 단계 — 다마고치처럼 키우면서 자라는 성장 축.
+ *
+ * 품종(생김새)·애니메이션(움직임)과 완전히 별개의 세 번째 축입니다.
+ * 품종이 "무슨 강아지냐"라면, 단계는 "몇 살이냐"입니다.
+ * 그래서 어떤 품종이든 네 단계를 똑같이 거칠 수 있고,
+ * 단계가 늘어도 품종 프리셋은 손댈 필요가 없습니다.
+ *
+ * 게임 동작 담당이 나이(경험치·키운 시간 등)를 보고 단계 하나를 골라
+ * `<PetCharacter stage={...} />`로 넘기면 됩니다.
+ * ------------------------------------------------------------------ */
+
+/**
+ * 성장 순서대로 나열한 생애 단계.
+ *   infant     영유아기 — 뽀짝한 아기. 머리가 크고 발이 유난히 크며 눈을 다 못 뜹니다
+ *   adolescent 청소년기 — 말은 안 듣지만 미워할 수 없는, 아직 몸에 안 맞는 큰 귀·큰 발
+ *   adult      청년     — 다 큰 기준 형태. 아무 보정도 없는 원점입니다
+ *   senior     노년     — 눈이 조금 탁해지고 털이 희끗해지며 귀가 살짝 처집니다
+ */
+export const LIFE_STAGE_NAMES = ['infant', 'adolescent', 'adult', 'senior'] as const;
+
+export type LifeStage = (typeof LIFE_STAGE_NAMES)[number];
+
+/**
+ * 한 단계가 캐릭터를 어떻게 보정하는지.
+ *
+ * 리그가 품종 프리셋 위에 이 값을 곱하거나 더해 최종 형태를 냅니다.
+ * 전부 "기준(청년)에서 얼마나 벗어나는가"라서, 청년은 모든 값이 무보정입니다.
+ */
+export type StageModifier = {
+  /** 목록·디버그 화면에 보여줄 한글 이름 */
+  label: string;
+  /** 머리 크기 배율. 아기일수록 머리가 커서 뽀짝합니다 */
+  headScale: number;
+  /** 몸통 크기 배율. 아기는 몸이 작고 옹송그립니다 */
+  bodyScale: number;
+  /** 발 크기 배율. 아기·청소년은 발만 먼저 커서 큼직합니다 */
+  pawScale: number;
+  /** 귀 길이 배율. 품종과 무관하게 아기는 작고 청소년은 큽니다 */
+  earScale: number;
+  /** 귀에 더해지는 처짐 각도(도). 클수록 더 아래로 처집니다 */
+  earDroop: number;
+  /** 눈 최대 개폐. 1이 활짝, 아기는 눈을 다 못 떠서 1보다 작습니다 */
+  eyeOpenMax: number;
+  /** 눈동자 탁함. 0 = 또렷, 1 = 뿌옇게. 노년에 올립니다 */
+  eyeCloudiness: number;
+  /** 털색 바램. 0 = 그대로, 1 = 희끗희끗. 노년에 올립니다 */
+  furFade: number;
+};
+
+/** 모든 단계의 원점(=청년). 무보정 값이라 여기서부터 위아래로 벌립니다. */
+export const NEUTRAL_STAGE: StageModifier = {
+  label: '청년',
+  headScale: 1,
+  bodyScale: 1,
+  pawScale: 1,
+  earScale: 1,
+  earDroop: 0,
+  eyeOpenMax: 1,
+  eyeCloudiness: 0,
+  furFade: 0,
+};
+
+/** 네 단계의 보정값. */
+export const LIFE_STAGES = {
+  // 영유아기 — 머리 크고 발 큼직, 귀는 아직 작고 쳐짐, 눈은 다 못 뜸
+  infant: {
+    ...NEUTRAL_STAGE,
+    label: '영유아기',
+    headScale: 1.22,
+    bodyScale: 0.82,
+    pawScale: 1.5,
+    earScale: 0.6,
+    earDroop: 45,
+    eyeOpenMax: 0.68,
+  },
+  // 청소년기 — 몸은 거의 다 컸는데 귀·발만 먼저 커서 비율이 어정쩡합니다
+  adolescent: {
+    ...NEUTRAL_STAGE,
+    label: '청소년기',
+    headScale: 0.98,
+    bodyScale: 0.96,
+    pawScale: 1.18,
+    earScale: 1.15,
+  },
+  // 청년 — 다 큰 기준 형태
+  adult: NEUTRAL_STAGE,
+  // 노년 — 눈이 탁해지고 털이 희끗, 귀가 살짝 처지고 눈도 조금 처집니다
+  senior: {
+    ...NEUTRAL_STAGE,
+    label: '노년',
+    earDroop: 12,
+    eyeOpenMax: 0.86,
+    eyeCloudiness: 0.55,
+    furFade: 0.4,
+  },
+} as const satisfies Record<LifeStage, StageModifier>;
+
+/** 아직 나이 정보가 없을 때 쓸 단계. 다 큰 청년으로 그립니다. */
+export const DEFAULT_STAGE: LifeStage = 'adult';
+
+/** 알 수 없는 단계 문자열이 들어와도 앱이 죽지 않게 걸러줍니다. */
+export function resolveStage(id: string | null | undefined): LifeStage {
+  return id != null && id in LIFE_STAGES ? (id as LifeStage) : DEFAULT_STAGE;
 }

@@ -5,8 +5,11 @@ import {
   BREEDS,
   DEFAULT_ANIMATION,
   DEFAULT_BREED,
+  DEFAULT_STAGE,
+  LIFE_STAGES,
   type AnimationName,
   type BreedId,
+  type LifeStage,
 } from '@/constants/pet';
 import { FontSize, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -14,11 +17,13 @@ import { useTheme } from '@/hooks/use-theme';
 export type PetCharacterProps = {
   /** 닮은 동물 검색 결과로 정해지는 품종. 없으면 기본 형태로 그립니다. */
   breed?: BreedId;
+  /** 게임 로직이 나이를 보고 골라 넘기는 생애 단계. 없으면 다 큰 청년으로 그립니다. */
+  stage?: LifeStage;
   /** 게임 로직이 펫 상태를 보고 골라 넘기는 동작. 계속 반복 재생됩니다. */
   animation?: AnimationName;
   /** 캐릭터가 차지할 정사각형 한 변 길이(px). */
   size?: number;
-  /** 품종·동작 이름을 밑에 같이 보여줍니다. 개발 중 확인용. */
+  /** 품종·단계·동작 이름을 밑에 같이 보여줍니다. 개발 중 확인용. */
   debug?: boolean;
   style?: ViewStyle;
 };
@@ -34,6 +39,7 @@ export type PetCharacterProps = {
  */
 export function PetCharacter({
   breed = DEFAULT_BREED,
+  stage = DEFAULT_STAGE,
   animation = DEFAULT_ANIMATION,
   size = 180,
   debug = false,
@@ -41,14 +47,19 @@ export function PetCharacter({
 }: PetCharacterProps) {
   const c = useTheme();
   const preset = BREEDS[breed];
+  const stageMod = LIFE_STAGES[stage];
 
   return (
-    <View style={[styles.wrap, style]} accessibilityLabel={`${preset.label} 캐릭터, ${animation}`}>
-      <PetRig preset={preset} size={size} animation={animation} />
+    <View
+      style={[styles.wrap, style]}
+      accessibilityLabel={`${stageMod.label} ${preset.label} 캐릭터, ${animation}`}>
+      <PetRig preset={preset} stage={stageMod} size={size} animation={animation} />
 
       {debug && (
         <View style={styles.caption}>
-          <Text style={[styles.breed, { color: c.text }]}>{preset.label}</Text>
+          <Text style={[styles.breed, { color: c.text }]}>
+            {preset.label} · {stageMod.label}
+          </Text>
           <Text style={[styles.animation, { color: c.primary }]}>{animation}</Text>
         </View>
       )}

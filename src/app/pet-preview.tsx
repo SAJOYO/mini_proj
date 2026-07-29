@@ -4,7 +4,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { PetCharacter } from '@/components/pet-character';
 import { PetRig, type PetPose } from '@/components/pet-rig';
 import { Screen } from '@/components/screen';
-import { ANIMATION_NAMES, BREEDS, type AnimationName, type BreedId } from '@/constants/pet';
+import {
+  ANIMATION_NAMES,
+  BREEDS,
+  LIFE_STAGES,
+  LIFE_STAGE_NAMES,
+  type AnimationName,
+  type BreedId,
+  type LifeStage,
+} from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -19,6 +27,7 @@ export default function PetPreviewScreen() {
   const c = useTheme();
   const [animation, setAnimation] = useState<AnimationName>('breathe');
   const [breed, setBreed] = useState<BreedId>('shiba');
+  const [stage, setStage] = useState<LifeStage>('adult');
 
   const breeds = Object.keys(BREEDS) as BreedId[];
 
@@ -26,11 +35,11 @@ export default function PetPreviewScreen() {
     <Screen scroll>
       <Text style={[styles.heading, { color: c.text }]}>움직임</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
-        눌러서 동작을 바꿔보세요. 계속 반복 재생됩니다.
+        눌러서 동작·품종·생애 단계를 바꿔보세요. 계속 반복 재생됩니다.
       </Text>
 
       <View style={styles.stage}>
-        <PetCharacter breed={breed} animation={animation} size={220} />
+        <PetCharacter breed={breed} stage={stage} animation={animation} size={220} />
       </View>
 
       <View style={styles.chips}>
@@ -41,6 +50,30 @@ export default function PetPreviewScreen() {
       <View style={styles.chips}>
         {breeds.map((b) => (
           <Chip key={b} label={BREEDS[b].label} active={b === breed} onPress={() => setBreed(b)} />
+        ))}
+      </View>
+      <View style={styles.chips}>
+        {LIFE_STAGE_NAMES.map((s) => (
+          <Chip
+            key={s}
+            label={LIFE_STAGES[s].label}
+            active={s === stage}
+            onPress={() => setStage(s)}
+          />
+        ))}
+      </View>
+
+      <Text style={[styles.heading, { color: c.text }]}>생애 단계</Text>
+      <Text style={[styles.note, { color: c.textSecondary }]}>
+        같은 품종({BREEDS[breed].label})이 자라는 순서입니다. 아기는 머리·발이 크고 눈을 다 못 뜨며,
+        노년은 눈이 탁해지고 털이 희끗해집니다.
+      </Text>
+      <View style={styles.row}>
+        {LIFE_STAGE_NAMES.map((s) => (
+          <View key={s} style={styles.cell}>
+            <PetRig preset={BREEDS[breed]} stage={LIFE_STAGES[s]} size={120} animation="breathe" />
+            <Text style={[styles.caption, { color: c.text }]}>{LIFE_STAGES[s].label}</Text>
+          </View>
         ))}
       </View>
 
