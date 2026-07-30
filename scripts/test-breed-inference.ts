@@ -26,8 +26,16 @@ async function main() {
     `${JSON.stringify(
       {
         elapsedMs: inference.elapsedMs,
+        // 1보다 크면 모델이 로스터 밖 품종을 냈다는 뜻입니다.
+        // 서버가 enum 을 강제해주는지 확인하는 지표로 씁니다.
         attempts: inference.attempts,
-        mix: inference.mix,
+        face: inference.face,
+        // reasons 는 추론 가능한 품종만 키로 갖습니다(neutral 제외).
+        // mix 에는 fallback 으로 neutral 이 들어올 수 있어서 안전하게 찾습니다.
+        mix: inference.mix.map((m) => ({
+          ...m,
+          reason: (inference.reasons as Record<string, string | undefined>)[m.breed] ?? null,
+        })),
         persona: {
           archetype: card.archetype,
           description: card.description,
