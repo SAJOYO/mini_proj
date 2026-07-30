@@ -111,6 +111,15 @@ export type BreedPreset = {
    * 무늬로 흉내내면 "얼굴에 큰 점이 있는 개"가 됩니다.
    */
   faceColor?: string;
+  /**
+   * 등에 얹히는 안장(saddle) 색. 없으면 안 그립니다.
+   *
+   * 요크셔의 회색 등, 비글의 검은 등처럼 "등판만 색이 다른" 무늬입니다.
+   * 개의 두 톤은 대부분 머리/몸이 아니라 **등/배**로 갈립니다. 요크셔도
+   * 가슴·다리는 얼굴과 같은 황갈색이고 등만 회색입니다. 그래서 머리와 몸을
+   * 통째로 다른 색으로 칠하면 목에서 색이 뚝 끊겨 부자연스러워집니다.
+   */
+  saddleColor?: string;
   /** 무늬 종류 */
   furPattern: 'solid' | 'patch' | 'spotted';
   /**
@@ -207,9 +216,14 @@ export const BREEDS = {
     snoutLength: 1.15,
     tailCurl: 0.55,
     bodyRatio: 1.05,
-    furColor: '#C98A4B',
-    // 비글은 실제로 얼굴·몸에 진한 얼룩이 있습니다
-    furPattern: 'patch',
+    // 비글은 검정·흰색·갈색 세 가지 색이 자리별로 나뉩니다.
+    //   흰색  가슴·배·다리·발 (바탕)
+    //   검정  등 (안장)
+    //   갈색  머리와 귀
+    furColor: '#F2EADF',
+    faceColor: '#C1803D',
+    saddleColor: '#332F2C',
+    furPattern: 'solid',
   },
   shihtzu: {
     ...NEUTRAL_BREED,
@@ -310,13 +324,12 @@ export const BREEDS = {
     tailCurl: 0.35,
     // 손바닥만 한 토이 테리어라 몸이 작습니다
     bodyRatio: 0.85,
-    // 몸은 스틸블루(푸른기 도는 회색), 얼굴과 귀는 황갈색.
-    // 이 두 톤이 갈리는 게 요크셔의 제일 큰 특징이라 얼룩이 아니라
-    // 부위 색으로 처리합니다.
-    furColor: '#8A8A93',
-    faceColor: '#BE8B4F',
+    // 얼굴·가슴·다리가 전부 황갈색이고, 스틸블루 회색은 등에만 얹힙니다.
+    // 머리와 몸을 통째로 갈랐더니 목에서 색이 뚝 끊겨 어색했습니다.
+    furColor: '#BE8B4F',
+    saddleColor: '#8A8A93',
     furPattern: 'solid',
-    // 귀 가장자리에서 옆으로 뻗는 긴 털
+    // 귀 바깥쪽 가장자리로 뻗는 긴 털
     furTexture: 'long',
   },
   // 7그룹 — 포인터. 길게 늘어진 귀와 긴 주둥이, 흰 바탕에 간 무늬(spotted)의 조렵견.

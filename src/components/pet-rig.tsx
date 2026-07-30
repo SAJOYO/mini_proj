@@ -284,20 +284,23 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // 노년일수록 털이 희끗해집니다. 회색 쪽으로 살짝 섞되, 품종 색이
   // 알아볼 수 없을 만큼 지우지는 않습니다.
   const fur = fade(preset.furColor, stage.furFade);
-  const line = shade(fur, -105);
   const pale = shade(fur, 45);
   // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
   // 무늬가 아니라 때 묻은 자국처럼 보입니다.
   const patch = shade(fur, -88);
 
-  // 얼굴·귀는 따로 색을 가질 수 있습니다(요크셔: 몸 회색 / 얼굴 황갈색).
+  // 얼굴·귀는 따로 색을 가질 수 있습니다(비글: 몸 흰색 / 머리 갈색).
   // faceColor가 없으면 몸과 같은 색이라, 대부분 품종은 아래 값들이 위와 같습니다.
-  // 외곽선·주둥이·눈까지 전부 얼굴색에서 파생시켜야 머리만 색이 겉돌지 않습니다.
   const faceFur = fade(preset.faceColor ?? preset.furColor, stage.furFade);
-  const faceLine = shade(faceFur, -105);
   const faceInner = shade(faceFur, -55);
   const facePale = shade(faceFur, 45);
   const facePatch = shade(faceFur, -88);
+
+  // 외곽선은 캐릭터 전체가 한 색이어야 합니다. 얼굴색과 몸색에서 각각 선을 뽑으면
+  // 비글처럼 명도 차가 큰 품종에서 "진한 갈색 머리 + 연회색 몸"이 되어, 머리만
+  // 따로 오려 붙인 것처럼 보입니다. 둘 중 진한 쪽으로 통일합니다.
+  const line = darkerOf(shade(fur, -105), shade(faceFur, -105));
+  const faceLine = line;
   // 노년은 눈동자가 뿌옇게 흐려집니다. 외곽선 색을 회청색 쪽으로 섞습니다.
   const eyeColor = mix(faceLine, '#8FA0A6', stage.eyeCloudiness);
   const curly = preset.furTexture === 'curly';
@@ -332,6 +335,11 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // (아기는 품종과 무관하게 귀가 작고 쳐지고, 노년은 살짝 처집니다.)
   const earAngle = Math.max(0, Math.min(170, preset.earAngle + stage.earDroop));
   const earLength = preset.earLength * stage.earScale;
+
+  // 귀 끝 뭉툭함 — 늘어진 귀일수록 끝이 동그래집니다(닥스훈트·리트리버·비글).
+  // 품종의 원래 각도로 판단합니다. 아기 때 귀가 처진다고 끝 모양까지
+  // 바뀌지는 않으므로 stage.earDroop이 더해진 값을 쓰면 안 됩니다.
+  const earTipRound = Math.min(1, Math.max(0, (preset.earAngle - 95) / 55)) * 0.8;
 
   // 머리 크기 배율. 아기는 머리가 커서 뽀짝합니다. 머리 중심을 축으로
   // 귀·눈·주둥이까지 통째로 키우거나 줄입니다.
@@ -436,6 +444,37 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
             stroke={line}
             strokeWidth={5}
           />
+
+          {/* 등 안장 — 몸통 윗부분만 덮습니다. 가슴털보다 먼저 그려서
+              가슴·배는 바탕색으로 남습니다. 요크셔의 회색 등, 비글의 검은 등이
+              전부 이 구조입니다. 앉아서 정면을 보는 자세라 어깨 위로만 보입니다. */}
+          {preset.saddleColor && (
+            <ClippedTo
+              shape={
+                <Blob
+                  cx={ANCHOR.body.x}
+                  cy={ANCHOR.body.y}
+                  rx={bodyRx}
+                  ry={bodyRy}
+                  curly={curly}
+                  bumps={16}
+                  amp={4.5}
+                  fill="#000"
+                />
+              }>
+              {/* 아래 끝이 몸통 한가운데쯤에서 끊기게 잡습니다. 더 내려오면
+                  등판이 아니라 앞가슴을 덮어서 턱시도 조끼처럼 보입니다.
+                  가로로는 몸통보다 넓혀 옆구리까지 감싸야 등에서 흘러내린 색이 됩니다. */}
+              <Ellipse
+                cx={ANCHOR.body.x}
+                cy={ANCHOR.body.y - bodyRy * 0.72}
+                rx={bodyRx * 1.25}
+                ry={bodyRy * 0.78}
+                fill={fade(preset.saddleColor, stage.furFade)}
+              />
+            </ClippedTo>
+          )}
+
           {/* 가슴 털 */}
           <Blob
             cx={100}
@@ -497,6 +536,8 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               length={earLength}
               curly={curly}
               longHair={longHair}
+              outerSide={-1}
+              tipRound={earTipRound}
               fur={faceFur}
               line={faceLine}
               inner={faceInner}
@@ -507,6 +548,8 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               length={earLength}
               curly={curly}
               longHair={longHair}
+              outerSide={1}
+              tipRound={earTipRound}
               fur={faceFur}
               line={faceLine}
               inner={faceInner}
@@ -573,8 +616,12 @@ type EarProps = {
   length: number;
   /** 곱슬 털이면 덥수룩한 덩어리로 그립니다 */
   curly: boolean;
-  /** 장모면 귀 옆으로 털이 흘러내립니다 */
+  /** 장모면 귀 바깥쪽 가장자리로 털이 뻗습니다 */
   longHair: boolean;
+  /** 이 귀의 바깥쪽 방향. 왼쪽 귀는 -1, 오른쪽 귀는 +1 */
+  outerSide: number;
+  /** 귀 끝 뭉툭함 0~1. 늘어진 귀일수록 커집니다 */
+  tipRound: number;
   fur: string;
   line: string;
   inner: string;
@@ -587,7 +634,18 @@ type EarProps = {
  * 타원이 아니라 끝이 좁아지는 잎 모양이라, 세워도 늘어뜨려도 강아지 귀로 읽힙니다.
  * (타원으로 하면 곧게 세웠을 때 토끼가 됩니다.)
  */
-function Ear({ anchor, animatedProps, length, curly, longHair, fur, line, inner }: EarProps) {
+function Ear({
+  anchor,
+  animatedProps,
+  length,
+  curly,
+  longHair,
+  outerSide,
+  tipRound,
+  fur,
+  line,
+  inner,
+}: EarProps) {
   // 곱슬 견종은 귀도 덥수룩한 덩어리로 그립니다. 잎 모양을 물결로 만드는 것보다
   // 귀 축을 따라 부풀린 덩어리를 얹는 쪽이 푸들 귀에 가깝습니다.
   const height = 42 * length;
@@ -616,13 +674,13 @@ function Ear({ anchor, animatedProps, length, curly, longHair, fur, line, inner 
                 귀에 뭔가를 붙여 놓은 것처럼 보이는데, 윤곽을 들쭉날쭉하게 하면
                 "이 귀에 털이 길게 났다"로 읽힙니다. 외곽선도 하나로 유지됩니다. */}
             <Path
-              d={longHair ? tuftedEarPath(length) : earPath(length, 1)}
+              d={longHair ? tuftedEarPath(length, outerSide) : earPath(length, 1, tipRound)}
               fill={fur}
               stroke={line}
               strokeWidth={5}
               strokeLinejoin="round"
             />
-            <Path d={earPath(length * 0.58, 0.5)} fill={inner} />
+            <Path d={earPath(length * 0.58, 0.5, tipRound)} fill={inner} />
           </>
         )}
       </G>
@@ -831,13 +889,29 @@ function curlyEllipse(
  * 귀 윤곽. 뿌리(0,0)에서 위로 뻗고 끝으로 갈수록 좁아집니다.
  * len = 길이 배율, widthScale = 폭 배율(안쪽 귀를 그릴 때 줄입니다).
  */
-function earPath(len: number, widthScale: number): string {
+function earPath(len: number, widthScale: number, tipRound = 0): string {
   const h = 42 * len;
   const w = 13 * widthScale;
+
+  // 곧게 선 귀 — 끝이 뾰족합니다 (시바·코기·도베르만·요크셔)
+  if (tipRound <= 0.02) {
+    return [
+      `M ${-w} 3`,
+      `C ${-w - 2} ${-h * 0.42}, ${-w + 4} ${-h * 0.86}, 0 ${-h}`,
+      `C ${w - 4} ${-h * 0.86}, ${w + 2} ${-h * 0.42}, ${w} 3`,
+      'Z',
+    ].join(' ');
+  }
+
+  // 늘어진 귀 — 끝이 동그랗게 뭉툭합니다 (닥스훈트·리트리버·비글).
+  // 뾰족한 잎 모양으로 늘어뜨리면 귀가 아니라 늘어진 나뭇잎으로 보입니다.
+  const tw = w * tipRound;
+  const ty = -h + tw;
   return [
     `M ${-w} 3`,
-    `C ${-w - 2} ${-h * 0.42}, ${-w + 4} ${-h * 0.86}, 0 ${-h}`,
-    `C ${w - 4} ${-h * 0.86}, ${w + 2} ${-h * 0.42}, ${w} 3`,
+    `C ${-w - 2} ${-h * 0.42}, ${-tw - 3} ${-h * 0.78}, ${-tw} ${ty}`,
+    `A ${tw} ${tw} 0 0 1 ${tw} ${ty}`,
+    `C ${tw + 3} ${-h * 0.78}, ${w + 2} ${-h * 0.42}, ${w} 3`,
     'Z',
   ].join(' ');
 }
@@ -852,7 +926,7 @@ function earPath(len: number, widthScale: number): string {
  * 뿌리(t=0)와 끝(t=1) 근처는 건드리지 않습니다. 뿌리가 들쭉날쭉하면 머리에
  * 붙은 자리가 지저분해지고, 끝이 갈라지면 귀가 두 갈래로 보입니다.
  */
-function tuftedEarPath(len: number): string {
+function tuftedEarPath(len: number, outerSide: number): string {
   const h = 42 * len;
   const w = 13;
   // 끝으로 갈수록 좁아지는 폭. earPath의 잎 모양과 비슷한 곡률입니다.
@@ -876,6 +950,11 @@ function tuftedEarPath(len: number): string {
   ];
 
   const edge = (sign: number): string[] => {
+    // 안쪽(얼굴 쪽) 가장자리는 매끈하게 둡니다. 양쪽 다 털을 내면 귀가
+    // 두 배로 복잡해지는데, 실제로도 얼굴에 닿는 안쪽은 그렇게 안 보입니다.
+    if (sign !== outerSide) {
+      return [`L ${(sign * outline(0.5).x).toFixed(1)} ${outline(0.5).y.toFixed(1)}`];
+    }
     const out: string[] = [];
     for (const { t, amp, tilt } of tufts) {
       // 좌우 대칭 이빨은 톱날로 보입니다. 뿌리 쪽에서 완만히 뻗어 나가고
@@ -954,6 +1033,15 @@ const clamp255 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
 function shade(color: string, amount: number): string {
   const [r, g, b] = parseColor(color);
   return `rgb(${clamp255(r + amount)}, ${clamp255(g + amount)}, ${clamp255(b + amount)})`;
+}
+
+/** 둘 중 더 어두운 색. 외곽선 색을 하나로 통일할 때 씁니다. */
+function darkerOf(a: string, b: string): string {
+  const sum = (c: string) => {
+    const [r, g, bl] = parseColor(c);
+    return r + g + bl;
+  };
+  return sum(a) <= sum(b) ? a : b;
 }
 
 /** 두 색을 t(0~1)만큼 섞습니다. t=0이면 a, t=1이면 b. */
