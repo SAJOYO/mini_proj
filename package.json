@@ -46,7 +46,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "persona:infer": "tsx scripts/test-breed-inference.ts",
+    "persona:infer": "tsx --env-file-if-exists=.env scripts/test-breed-inference.ts",
     "test:persona": "tsx --test src/lib/breed-inference/*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
