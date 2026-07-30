@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 
-import { synthesize } from '@/constants/persona';
+import { synthesize } from '@/lib/persona';
 import { inferBreedMix } from '@/lib/breed-inference/infer-breed-mix';
 import { ChatCompletionsVisionClient } from '@/lib/breed-inference/chat-completions-client';
 import type { VisionImageInput } from '@/lib/breed-inference/types';

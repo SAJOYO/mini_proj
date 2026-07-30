@@ -15,7 +15,7 @@
 import { readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 
-import { synthesize } from '@/constants/persona';
+import { synthesize } from '@/lib/persona';
 import { BREEDS } from '@/constants/pet';
 import { ChatCompletionsVisionClient } from '@/lib/breed-inference/chat-completions-client';
 import { inferBreedMix } from '@/lib/breed-inference/infer-breed-mix';

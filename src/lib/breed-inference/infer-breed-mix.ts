@@ -1,4 +1,4 @@
-import { resolveMix } from '@/constants/persona';
+import { resolveMix } from '@/lib/persona';
 import { BREED_INFERENCE_PROMPT, BREED_MIX_JSON_SCHEMA } from '@/lib/breed-inference/prompt';
 import type {
   InferBreedMixInput,

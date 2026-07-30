@@ -1,4 +1,4 @@
-import type { BreedMix } from '@/constants/persona';
+import type { BreedMix } from '@/lib/persona';
 import { INFERABLE_BREED_IDS, type InferableBreedId } from '@/lib/breed-inference/types';
 
 const inferableIds = new Set<string>(INFERABLE_BREED_IDS);

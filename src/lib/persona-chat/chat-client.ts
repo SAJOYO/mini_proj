@@ -1,4 +1,4 @@
-import type { PersonaCard } from '@/constants/persona';
+import type { PersonaCard } from '@/lib/persona';
 import { ChatCompletionsClient } from '@/lib/llm/client';
 import { systemPrompt } from '@/lib/persona-chat/system-prompt';
 

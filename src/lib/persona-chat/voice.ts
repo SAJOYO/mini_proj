@@ -1,4 +1,4 @@
-import { AXIS_KEYS, type AxisKey, type Band, type PersonaCard } from '@/constants/persona';
+import { AXIS_KEYS, type AxisKey, type Band, type PersonaCard } from '@/lib/persona';
 
 /**
  * 성격 축을 말투 지시로 옮기는 표.

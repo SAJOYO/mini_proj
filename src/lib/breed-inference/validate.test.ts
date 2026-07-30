@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolveMix } from '@/constants/persona';
+import { resolveMix } from '@/lib/persona';
 import { parseBreedMixResponse } from '@/lib/breed-inference/validate';
 
 test('정상 응답은 병합이나 정규화 없이 그대로 파싱한다', () => {

@@ -8,7 +8,7 @@
  *   npm run persona:prompt -- doberman:55 greyhound:30 pointer:15 [이름]
  */
 
-import { AXES, AXIS_KEYS, synthesize, traitOf, type BreedMix } from '@/constants/persona';
+import { AXES, AXIS_KEYS, synthesize, traitOf, type BreedMix } from '@/lib/persona';
 import { BREEDS, type BreedId } from '@/constants/pet';
 import { SHARED_RULES, characterBlock } from '@/lib/persona-chat/system-prompt';
 

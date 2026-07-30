@@ -1,4 +1,4 @@
-import { dominantBreed, type PersonaCard } from '@/constants/persona';
+import { dominantBreed, type PersonaCard } from '@/lib/persona';
 import { ANIMATION_NAMES, BREEDS, type AnimationName } from '@/constants/pet';
 import { voiceLines } from '@/lib/persona-chat/voice';
 

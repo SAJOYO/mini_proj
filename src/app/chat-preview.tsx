@@ -20,7 +20,7 @@ import {
   synthesize,
   traitOf,
   type BreedMix,
-} from '@/constants/persona';
+} from '@/lib/persona';
 import { BREEDS } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';

@@ -1,4 +1,4 @@
-import type { BreedMix } from '@/constants/persona';
+import type { BreedMix } from '@/lib/persona';
 import { BREEDS, type BreedId } from '@/constants/pet';
 
 /** LLM 추론 후보. `neutral`은 애플리케이션 fallback이므로 제외합니다. */
