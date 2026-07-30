@@ -46,13 +46,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "persona:infer": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.persona scripts/test-breed-inference.ts",
+    "persona:infer": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/test-breed-inference.ts",
     "test:persona": "tsx --test \"src/lib/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write . && eslint . --fix",
     "check": "npm run typecheck && npm run lint",
-    "persona:chat": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.persona scripts/test-persona-chat.ts",
+    "persona:chat": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/test-persona-chat.ts",
     "persona:prompt": "tsx scripts/inspect-persona-prompt.ts"
   },
   "engines": {

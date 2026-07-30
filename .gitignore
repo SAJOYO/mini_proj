@@ -43,7 +43,6 @@ yarn-error.*
 .env
 .env.*
 !.env.example
-!.env.persona.example
 
 # typescript
 *.tsbuildinfo
