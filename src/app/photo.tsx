@@ -9,20 +9,29 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { clearPhotoUri, loadPhotoUri, savePhotoUri } from '@/lib/storage';
+import { toVisionImage } from '@/lib/image';
+import { visionTarget } from '@/lib/llm/config';
+import { createCharacterFromPhoto } from '@/lib/pipeline';
+import { clearPhotoUri, loadPhotoUri, saveAnalysis, savePhotoUri } from '@/lib/storage';
 
 const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
   allowsEditing: true,
   aspect: [1, 1],
   quality: 0.8,
+  // 고르는 즉시 base64 를 같이 받습니다. 바로 판정에 쓸 수 있어서 파일을
+  // 다시 읽지 않아도 됩니다 (앱을 껐다 켠 경우에는 URI 로 다시 읽습니다).
+  base64: true,
 };
+
+/** 판정 설정. 모듈 최상위에서 한 번만 읽습니다. 키가 없으면 null 입니다. */
+const VISION = visionTarget();
 
 /**
  * 사진 업로드 화면.
  *
  * 고른 사진의 로컬 URI만 저장합니다(원본 파일은 기기 캐시에 그대로 있음).
- * 이 URI가 이후 "닮은 동물 찾기"의 입력값이 됩니다.
+ * [분석하기]를 누르면 이 사진으로 품종 판정을 돌리고 결과를 저장합니다.
  */
 export default function PhotoScreen() {
   const c = useTheme();
@@ -30,21 +39,65 @@ export default function PhotoScreen() {
   const { user, signOut } = useAuth();
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  // 피커가 준 base64. 저장소에는 넣지 않습니다(사진 한 장이 수 MB).
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    // 이전에 골라둔 사진이 있으면 복원
+    // 이전에 골라둔 사진이 있으면 복원 (base64 는 없으니 필요할 때 다시 읽습니다)
     loadPhotoUri().then(setPhotoUri);
   }, []);
 
   async function applyResult(result: ImagePicker.ImagePickerResult) {
     if (result.canceled) return;
 
-    const uri = result.assets[0]?.uri;
-    if (!uri) return;
+    const asset = result.assets[0];
+    if (!asset?.uri) return;
 
-    setPhotoUri(uri);
-    await savePhotoUri(uri);
+    setPhotoUri(asset.uri);
+    setPhotoBase64(asset.base64 ?? null);
+    await savePhotoUri(asset.uri);
+  }
+
+  /**
+   * 사진으로 캐릭터를 만들고 게임 화면으로 넘어갑니다.
+   *
+   * 결과는 저장해두고 다시 부르지 않습니다. 무료 티어가 하루 20건 남짓이라
+   * 화면을 드나들 때마다 호출하면 금방 막힙니다.
+   */
+  async function analyze() {
+    if (!photoUri || analyzing) return;
+
+    if (!VISION) {
+      Alert.alert(
+        'API 키가 설정되지 않았어요',
+        '.env 파일에 EXPO_PUBLIC_VISION_API_KEY 와 EXPO_PUBLIC_VISION_MODEL 을 넣고 앱을 다시 시작해 주세요. (.env.example 참고)',
+      );
+      return;
+    }
+
+    setAnalyzing(true);
+    try {
+      const image = await toVisionImage(photoUri, photoBase64);
+      const { inference } = await createCharacterFromPhoto(image, VISION);
+
+      await saveAnalysis({
+        mix: inference.mix,
+        face: inference.face,
+        reasons: inference.reasons,
+        createdAt: new Date().toISOString(),
+      });
+
+      router.replace('/game');
+    } catch (error) {
+      // 무엇이 잘못됐는지 보여줍니다. "실패했어요"만 띄우면 키 문제인지
+      // 네트워크인지 모델이 이상한 걸 뱉은 건지 알 수가 없습니다.
+      const reason = error instanceof Error ? error.message : String(error);
+      Alert.alert('분석에 실패했어요', reason);
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   async function pickFromLibrary() {
@@ -76,6 +129,7 @@ export default function PhotoScreen() {
 
   async function removePhoto() {
     setPhotoUri(null);
+    setPhotoBase64(null);
     await clearPhotoUri();
   }
 
@@ -122,13 +176,27 @@ export default function PhotoScreen() {
         {photoUri ? (
           <>
             {/*
-              TODO(홍가연): 여기와 게임 화면 사이에 "닮은 동물 찾기 결과" 화면이 들어갑니다.
-              photoUri를 넘겨서 품종 판정 + 캐릭터 이미지를 받아오면 됩니다.
-                router.push({ pathname: '/result', params: { photoUri } })
-              그게 붙기 전까지는 흐름을 끝까지 확인할 수 있게 곧바로 게임으로 보냅니다.
+              TODO(홍가연): 판정 결과를 보여주는 화면이 여기와 게임 사이에 들어갑니다.
+              지금은 판정만 하고 곧바로 게임으로 넘어갑니다. 결과는 저장돼 있으니
+              (`loadAnalysis()`) 결과 화면을 만들 때 다시 부를 필요 없습니다.
             */}
-            <Button label="분석하고 시작하기" onPress={() => router.replace('/game')} />
-            <Button label="다시 고르기" variant="secondary" onPress={removePhoto} disabled={busy} />
+            <Button
+              label={analyzing ? '' : '분석하고 시작하기'}
+              onPress={analyze}
+              loading={analyzing}
+              disabled={busy}
+            />
+            <Button
+              label="다시 고르기"
+              variant="secondary"
+              onPress={removePhoto}
+              disabled={busy || analyzing}
+            />
+            {!VISION && (
+              <Text style={[styles.warn, { color: c.danger }]}>
+                API 키가 없어서 분석이 안 됩니다. .env 를 확인해 주세요.
+              </Text>
+            )}
           </>
         ) : (
           <>
@@ -195,5 +263,9 @@ const styles = StyleSheet.create({
   actions: {
     gap: Spacing.sm,
     paddingBottom: Spacing.md,
+  },
+  warn: {
+    fontSize: FontSize.caption,
+    textAlign: 'center',
   },
 });
