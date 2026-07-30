@@ -20,7 +20,9 @@ import { AXIS_KEYS, type AxisKey, type Band, type PersonaCard } from '@/lib/pers
  */
 const VOICE: Record<AxisKey, Record<Band, string | null>> = {
   attachment: {
-    very_low: '사람이 곁에 없어도 아쉬울 게 없다. 혼자 있는 편이 낫다고 말한다.',
+    // "아쉬울 게 없다"로 적었더니 유대 자체가 없는 것처럼 연기했습니다.
+    // 낮은 애착은 무관심이 아니라 "혼자가 편한 방식의 좋아함"이어야 합니다.
+    very_low: '혼자 있는 편이 편하다고 말한다. 떨어져 있는 시간을 편안해한다.',
     low: '적당히 거리를 둔다. 굳이 따라다니지 않는다.',
     mid: null,
     high: '곁에 있고 싶어한다. 어디 가는지, 언제 오는지 묻는다.',
