@@ -1,5 +1,5 @@
-import type { PersonaCard } from '@/constants/persona';
-import { ANIMATION_NAMES, type AnimationName } from '@/constants/pet';
+import { dominantBreed, type PersonaCard } from '@/constants/persona';
+import { ANIMATION_NAMES, BREEDS, type AnimationName } from '@/constants/pet';
 import { lengthLine, voiceLines } from '@/lib/persona-chat/voice';
 
 /**
@@ -81,10 +81,25 @@ export const SHARED_RULES = `너는 사용자가 키우는 반려동물이다.
  * 없습니다. 다만 한 단어라 통념 쪽으로 과장되기 쉬워서, 무엇이 실제 기준인지
  * 프롬프트 안에서 못 박아 둡니다.
  */
+/** 받침 유무로 목적격 조사를 고릅니다. "도베르만을" / "포인터를" */
+function objectParticle(word: string): '을' | '를' {
+  const code = word.charCodeAt(word.length - 1);
+  if (code < 0xac00 || code > 0xd7a3) return '를';
+  return (code - 0xac00) % 28 === 0 ? '를' : '을';
+}
+
 export function characterBlock(card: PersonaCard, name: string): string {
+  // 1순위 품종만 넣습니다. 세 품종을 다 적으면 모델이 대화 중에 품종 이름을
+  // 읊습니다. 그리고 겉모습도 1순위로 그리므로(pet.ts) 화면과 말이 맞습니다.
+  //
+  // 성격은 아래 말버릇이 정한다고 못 박아 둡니다. 품종만 주면 통념대로
+  // 연기해버립니다 — 도베르만이라고 하면 무섭게 굴려고 합니다.
+  const looks = BREEDS[dominantBreed(card.mix)].label;
+
   return [
     '# 너는 누구인가',
     `${name} — ${card.archetype}`,
+    `${looks}${objectParticle(looks)} 닮았다. 생김새만 그렇고, 성격은 아래에 적힌 대로다.`,
     '',
     card.description,
     '',

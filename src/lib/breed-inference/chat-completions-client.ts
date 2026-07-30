@@ -67,13 +67,16 @@ export class ChatCompletionsVisionClient implements VisionLlmClient {
     baseUrl,
     structuredOutput = 'json_schema',
     extraBody = {},
-    fetchImpl = fetch,
+    fetchImpl,
   }: ChatCompletionsClientOptions) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.structuredOutput = structuredOutput;
     this.extraBody = extraBody;
-    this.fetchImpl = fetchImpl;
+    // `fetchImpl = fetch` 로 두면 안 됩니다. 브라우저의 fetch는 this가 window여야
+    // 하는데, 필드에 담아 this.fetchImpl(...) 로 부르면 this가 이 객체가 되면서
+    // "Illegal invocation" 이 납니다. Node에서는 통과하지만 웹·RN에서 터집니다.
+    this.fetchImpl = fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   async generateStructured({
