@@ -29,7 +29,7 @@ export default function PetPreviewScreen() {
   const c = useTheme();
   const [animation, setAnimation] = useState<AnimationName>('breathe');
   const [breed, setBreed] = useState<BreedId>('shiba');
-  const [stage, setStage] = useState<LifeStage>('adult');
+  const [stage, setStage] = useState<LifeStage>('young');
   const [scene, setScene] = useState<SceneKind>('room');
 
   const breeds = Object.keys(BREEDS) as BreedId[];

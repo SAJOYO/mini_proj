@@ -510,7 +510,7 @@ export function breedsByGroup(): { group: FciGroup; label: string; breeds: Breed
  *   adult      청년     — 다 큰 기준 형태. 아무 보정도 없는 원점입니다
  *   senior     노년     — 눈이 조금 탁해지고 털이 희끗해지며 귀가 살짝 처집니다
  */
-export const LIFE_STAGE_NAMES = ['infant', 'adolescent', 'adult', 'senior'] as const;
+export const LIFE_STAGE_NAMES = ['baby', 'teen', 'young', 'elder'] as const;
 
 export type LifeStage = (typeof LIFE_STAGE_NAMES)[number];
 
@@ -557,7 +557,7 @@ export const NEUTRAL_STAGE: StageModifier = {
 /** 네 단계의 보정값. */
 export const LIFE_STAGES = {
   // 영유아기 — 머리 크고 발 큼직, 귀는 아직 작고 쳐짐, 눈은 다 못 뜸
-  infant: {
+  baby: {
     ...NEUTRAL_STAGE,
     label: '영유아기',
     headScale: 1.22,
@@ -568,7 +568,7 @@ export const LIFE_STAGES = {
     eyeOpenMax: 0.68,
   },
   // 청소년기 — 몸은 거의 다 컸는데 귀·발만 먼저 커서 비율이 어정쩡합니다
-  adolescent: {
+  teen: {
     ...NEUTRAL_STAGE,
     label: '청소년기',
     headScale: 0.98,
@@ -577,9 +577,9 @@ export const LIFE_STAGES = {
     earScale: 1.15,
   },
   // 청년 — 다 큰 기준 형태
-  adult: NEUTRAL_STAGE,
+  young: NEUTRAL_STAGE,
   // 노년 — 눈이 탁해지고 털이 희끗, 귀가 살짝 처지고 눈도 조금 처집니다
-  senior: {
+  elder: {
     ...NEUTRAL_STAGE,
     label: '노년',
     earDroop: 12,
@@ -590,7 +590,7 @@ export const LIFE_STAGES = {
 } as const satisfies Record<LifeStage, StageModifier>;
 
 /** 아직 나이 정보가 없을 때 쓸 단계. 다 큰 청년으로 그립니다. */
-export const DEFAULT_STAGE: LifeStage = 'adult';
+export const DEFAULT_STAGE: LifeStage = 'young';
 
 /** 알 수 없는 단계 문자열이 들어와도 앱이 죽지 않게 걸러줍니다. */
 export function resolveStage(id: string | null | undefined): LifeStage {
