@@ -102,15 +102,26 @@ export type BreedPreset = {
   bodyRatio: number;
   /** 기본 털색 */
   furColor: string;
+  /**
+   * 얼굴·귀 색. 없으면 furColor를 그대로 씁니다.
+   *
+   * 요크셔처럼 "몸은 회색, 얼굴은 황갈색"인 품종을 위한 값입니다.
+   * 이건 얼룩(furPattern)이 아닙니다. 얼룩은 몸 위에 다른 색 반점을 얹는
+   * 것이고, 이건 부위 전체가 다른 색인 경우라 별도 값이 필요합니다.
+   * 무늬로 흉내내면 "얼굴에 큰 점이 있는 개"가 됩니다.
+   */
+  faceColor?: string;
   /** 무늬 종류 */
   furPattern: 'solid' | 'patch' | 'spotted';
   /**
    * 털 질감.
-   * smooth = 매끈한 윤곽, curly = 곱슬(푸들처럼 윤곽이 물결칩니다).
+   *   smooth 매끈한 윤곽
+   *   curly  곱슬 — 푸들처럼 윤곽이 물결칩니다
+   *   long   장모 — 요크셔처럼 귀와 얼굴 옆으로 털이 흘러내립니다
    * 머리·귀·몸통 실루엣에만 적용되고 주둥이는 항상 매끈합니다.
    * (푸들은 실제로 주둥이 털을 짧게 미는 견종입니다.)
    */
-  furTexture: 'smooth' | 'curly';
+  furTexture: 'smooth' | 'curly' | 'long';
 };
 
 /**
@@ -299,9 +310,14 @@ export const BREEDS = {
     tailCurl: 0.35,
     // 손바닥만 한 토이 테리어라 몸이 작습니다
     bodyRatio: 0.85,
-    furColor: '#8A6F52',
-    // 얼굴은 밝고 몸은 짙은 스틸블루 — 두 톤을 얼룩으로 표현합니다
-    furPattern: 'patch',
+    // 몸은 스틸블루(푸른기 도는 회색), 얼굴과 귀는 황갈색.
+    // 이 두 톤이 갈리는 게 요크셔의 제일 큰 특징이라 얼룩이 아니라
+    // 부위 색으로 처리합니다.
+    furColor: '#8A8A93',
+    faceColor: '#BE8B4F',
+    furPattern: 'solid',
+    // 귀 가장자리에서 옆으로 뻗는 긴 털
+    furTexture: 'long',
   },
   // 7그룹 — 포인터. 길게 늘어진 귀와 긴 주둥이, 흰 바탕에 간 무늬(spotted)의 조렵견.
   pointer: {

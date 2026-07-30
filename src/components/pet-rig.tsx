@@ -285,14 +285,23 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // 알아볼 수 없을 만큼 지우지는 않습니다.
   const fur = fade(preset.furColor, stage.furFade);
   const line = shade(fur, -105);
-  const inner = shade(fur, -55);
   const pale = shade(fur, 45);
   // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
   // 무늬가 아니라 때 묻은 자국처럼 보입니다.
   const patch = shade(fur, -88);
+
+  // 얼굴·귀는 따로 색을 가질 수 있습니다(요크셔: 몸 회색 / 얼굴 황갈색).
+  // faceColor가 없으면 몸과 같은 색이라, 대부분 품종은 아래 값들이 위와 같습니다.
+  // 외곽선·주둥이·눈까지 전부 얼굴색에서 파생시켜야 머리만 색이 겉돌지 않습니다.
+  const faceFur = fade(preset.faceColor ?? preset.furColor, stage.furFade);
+  const faceLine = shade(faceFur, -105);
+  const faceInner = shade(faceFur, -55);
+  const facePale = shade(faceFur, 45);
+  const facePatch = shade(faceFur, -88);
   // 노년은 눈동자가 뿌옇게 흐려집니다. 외곽선 색을 회청색 쪽으로 섞습니다.
-  const eyeColor = mix(line, '#8FA0A6', stage.eyeCloudiness);
+  const eyeColor = mix(faceLine, '#8FA0A6', stage.eyeCloudiness);
   const curly = preset.furTexture === 'curly';
+  const longHair = preset.furTexture === 'long';
 
   // 품종·단계 숫자를 실제 치수로 변환
   const bodyScale = stage.bodyScale;
@@ -487,14 +496,20 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               animatedProps={earLeftProps}
               length={earLength}
               curly={curly}
-              {...{ fur, line, inner }}
+              longHair={longHair}
+              fur={faceFur}
+              line={faceLine}
+              inner={faceInner}
             />
             <Ear
               anchor={ANCHOR.earRight}
               animatedProps={earRightProps}
               length={earLength}
               curly={curly}
-              {...{ fur, line, inner }}
+              longHair={longHair}
+              fur={faceFur}
+              line={faceLine}
+              inner={faceInner}
             />
 
             {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
@@ -506,13 +521,13 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               curly={curly}
               bumps={14}
               amp={4.5}
-              fill={fur}
-              stroke={line}
+              fill={faceFur}
+              stroke={faceLine}
               strokeWidth={5}
             />
 
             {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
-            <FacePattern pattern={preset.furPattern} tone={patch} curly={curly} />
+            <FacePattern pattern={preset.furPattern} tone={facePatch} curly={curly} />
 
             {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
             <AnimatedG animatedProps={muzzleProps}>
@@ -521,17 +536,17 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
                 cy={muzzleCy}
                 rx={28}
                 ry={muzzleRy}
-                fill={pale}
-                stroke={line}
+                fill={facePale}
+                stroke={faceLine}
                 strokeWidth={3}
               />
-              <Ellipse cx={100} cy={muzzleCy - muzzleRy * 0.5} rx={11} ry={8.5} fill={line} />
+              <Ellipse cx={100} cy={muzzleCy - muzzleRy * 0.5} rx={11} ry={8.5} fill={faceLine} />
               <Path
                 d={mouthPath(muzzleCy, muzzleRy, mouthOpen)}
-                stroke={line}
+                stroke={faceLine}
                 strokeWidth={3.5}
                 strokeLinecap="round"
-                fill={mouthOpen > 0.15 ? shade(fur, -130) : 'none'}
+                fill={mouthOpen > 0.15 ? shade(faceFur, -130) : 'none'}
               />
             </AnimatedG>
 
@@ -558,6 +573,8 @@ type EarProps = {
   length: number;
   /** 곱슬 털이면 덥수룩한 덩어리로 그립니다 */
   curly: boolean;
+  /** 장모면 귀 옆으로 털이 흘러내립니다 */
+  longHair: boolean;
   fur: string;
   line: string;
   inner: string;
@@ -570,7 +587,7 @@ type EarProps = {
  * 타원이 아니라 끝이 좁아지는 잎 모양이라, 세워도 늘어뜨려도 강아지 귀로 읽힙니다.
  * (타원으로 하면 곧게 세웠을 때 토끼가 됩니다.)
  */
-function Ear({ anchor, animatedProps, length, curly, fur, line, inner }: EarProps) {
+function Ear({ anchor, animatedProps, length, curly, longHair, fur, line, inner }: EarProps) {
   // 곱슬 견종은 귀도 덥수룩한 덩어리로 그립니다. 잎 모양을 물결로 만드는 것보다
   // 귀 축을 따라 부풀린 덩어리를 얹는 쪽이 푸들 귀에 가깝습니다.
   const height = 42 * length;
@@ -595,8 +612,11 @@ function Ear({ anchor, animatedProps, length, curly, fur, line, inner }: EarProp
           </>
         ) : (
           <>
+            {/* 장모는 귀 윤곽 자체를 톱니로 만듭니다. 귀에 털 뭉치를 따로 얹으면
+                귀에 뭔가를 붙여 놓은 것처럼 보이는데, 윤곽을 들쭉날쭉하게 하면
+                "이 귀에 털이 길게 났다"로 읽힙니다. 외곽선도 하나로 유지됩니다. */}
             <Path
-              d={earPath(length, 1)}
+              d={longHair ? tuftedEarPath(length) : earPath(length, 1)}
               fill={fur}
               stroke={line}
               strokeWidth={5}
@@ -818,6 +838,65 @@ function earPath(len: number, widthScale: number): string {
     `M ${-w} 3`,
     `C ${-w - 2} ${-h * 0.42}, ${-w + 4} ${-h * 0.86}, 0 ${-h}`,
     `C ${w - 4} ${-h * 0.86}, ${w + 2} ${-h * 0.42}, ${w} 3`,
+    'Z',
+  ].join(' ');
+}
+
+/**
+ * 털이 삐쭉삐쭉한 귀 윤곽 (장모용).
+ *
+ * earPath와 같은 잎 모양·같은 치수인데, 양옆 가장자리만 톱니로 바꿉니다.
+ * 뾰족한 점은 바깥으로 밀면서 살짝 위로도 올립니다. 옆으로만 밀면 톱날이
+ * 되지만, 위로 같이 올리면 털이 위쪽을 향해 자란 것처럼 보입니다.
+ *
+ * 뿌리(t=0)와 끝(t=1) 근처는 건드리지 않습니다. 뿌리가 들쭉날쭉하면 머리에
+ * 붙은 자리가 지저분해지고, 끝이 갈라지면 귀가 두 갈래로 보입니다.
+ */
+function tuftedEarPath(len: number): string {
+  const h = 42 * len;
+  const w = 13;
+  // 끝으로 갈수록 좁아지는 폭. earPath의 잎 모양과 비슷한 곡률입니다.
+  const outline = (t: number) => ({
+    x: w * (1 - Math.pow(t, 1.7)),
+    y: 3 - h * t,
+  });
+
+  // 실제 요크셔 귀털은 위가 아니라 **옆으로** 부챗살처럼 뻗습니다.
+  // 위로 올리면 뿔이나 가시가 되고, 균일한 간격으로 촘촘히 넣으면 톱날이 됩니다.
+  // 그래서 길이와 간격을 일부러 들쭉날쭉하게 두고, 가운데가 가장 길게 합니다.
+  // tilt는 세로 방향 기울기(양수가 아래). 0만 쓰면 빗처럼 가지런해집니다.
+  // 길이는 외곽선 두께(5)보다 확실히 커야 합니다. 비슷하면 둥근 선 마감에
+  // 뾰족한 끝이 먹혀서 털이 아니라 주름·비늘처럼 보입니다. 개수를 줄이는 대신
+  // 하나하나를 길게 빼는 쪽이 이 크기에서는 훨씬 털에 가깝습니다.
+  const tufts = [
+    { t: 0.24, amp: 7, tilt: 0.1 },
+    { t: 0.42, amp: 10, tilt: 0.22 },
+    { t: 0.6, amp: 9, tilt: 0.32 },
+    { t: 0.78, amp: 6, tilt: 0.25 },
+  ];
+
+  const edge = (sign: number): string[] => {
+    const out: string[] = [];
+    for (const { t, amp, tilt } of tufts) {
+      // 좌우 대칭 이빨은 톱날로 보입니다. 뿌리 쪽에서 완만히 뻗어 나가고
+      // 끝에서 급히 돌아와야 한쪽으로 쓸린 털 가닥처럼 읽힙니다.
+      const root = outline(t - 0.085);
+      const tip = outline(t);
+      const back = outline(t + 0.025);
+      const p = (x: number, y: number) => `L ${(sign * x).toFixed(1)} ${y.toFixed(1)}`;
+      out.push(p(root.x, root.y));
+      out.push(p(tip.x + amp, tip.y + amp * tilt));
+      out.push(p(back.x, back.y));
+    }
+    return out;
+  };
+
+  return [
+    `M ${-w} 3`,
+    ...edge(-1),
+    `L 0 ${(-h).toFixed(1)}`,
+    ...edge(1).reverse(),
+    `L ${w} 3`,
     'Z',
   ].join(' ');
 }
