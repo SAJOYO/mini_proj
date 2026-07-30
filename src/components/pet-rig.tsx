@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { Circle, Ellipse, G, Path, Rect, Svg } from 'react-native-svg';
+import { Circle, ClipPath, Defs, Ellipse, G, Path, Rect, Svg } from 'react-native-svg';
 
 import {
   NEUTRAL_STAGE,
@@ -370,8 +370,20 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
     <Svg width={size} height={size} viewBox={`0 0 ${VIEW} ${VIEW}`}>
       {/* 몸 전체 — 호흡할 때 위아래로 움직이는 최상위 그룹 */}
       <AnimatedG animatedProps={rootProps}>
-        {/* 꼬리: 몸통보다 먼저 그려서 뒤로 보냅니다 */}
+        {/* 꼬리: 몸통보다 먼저 그려서 뒤로 보냅니다.
+            꼬리는 채워진 도형이 아니라 굵은 획이라, 다른 부위처럼 stroke를 줄 수
+            없습니다. 대신 더 굵은 획을 외곽선 색으로 한 겹 깔고 그 위에 털색 획을
+            얹으면, 삐져나온 만큼이 테두리로 보입니다. 몸통 stroke가 5(=바깥 2.5)
+            이므로 18+5로 두께를 맞춰 같은 굵기의 선이 되게 했습니다.
+            말티즈·비숑처럼 털이 연한 품종은 이 선이 없으면 방 배경에 묻힙니다. */}
         <AnimatedG animatedProps={tailProps}>
+          <Path
+            d={tailPath(preset.tailCurl, preset.tailLength)}
+            stroke={line}
+            strokeWidth={23}
+            strokeLinecap="round"
+            fill="none"
+          />
           <Path
             d={tailPath(preset.tailCurl, preset.tailLength)}
             stroke={fur}
@@ -426,7 +438,15 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
             amp={3}
             fill={pale}
           />
-          <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
+          <BodyPattern
+            pattern={preset.furPattern}
+            tone={patch}
+            cx={ANCHOR.body.x}
+            cy={ANCHOR.body.y}
+            rx={bodyRx}
+            ry={bodyRy}
+            curly={curly}
+          />
         </AnimatedG>
 
         {/* 앞다리 — 앉은 자세라 가슴 '앞'에서 곧게 내려옵니다. 그래서 몸통보다 뒤에
@@ -492,7 +512,7 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
             />
 
             {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
-            <FacePattern pattern={preset.furPattern} tone={patch} />
+            <FacePattern pattern={preset.furPattern} tone={patch} curly={curly} />
 
             {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
             <AnimatedG animatedProps={muzzleProps}>
@@ -638,6 +658,32 @@ function Eye({ cx, cy, open, line }: { cx: number; cy: number; open: number; lin
 }
 
 /**
+ * 무늬를 부위 실루엣 안으로 가둡니다.
+ *
+ * 무늬는 실루엣과 별개로 놓인 도형이라, 좌표를 아무리 맞춰도 품종(몸통 비율)과
+ * 생애 단계(크기 배율) 조합에 따라 언젠가는 밖으로 삐져나옵니다. 좌표를 조금씩
+ * 미는 대신 실루엣 자체를 클립으로 씌우면, 어떤 조합이 와도 새어나가지 않습니다.
+ */
+function ClippedTo({
+  shape,
+  children,
+}: {
+  /** 클립으로 쓸 실루엣. 칠할 때와 똑같은 도형이어야 합니다 */
+  shape: ReactNode;
+  children: ReactNode;
+}) {
+  const clipId = `mask-${useId()}`;
+  return (
+    <>
+      <Defs>
+        <ClipPath id={clipId}>{shape}</ClipPath>
+      </Defs>
+      <G clipPath={`url(#${clipId})`}>{children}</G>
+    </>
+  );
+}
+
+/**
  * 몸통에 얹는 무늬.
  *
  * 얼룩(patch)은 등 위쪽에 붙여서 몸통 윤곽을 타게 그립니다.
@@ -646,35 +692,36 @@ function Eye({ cx, cy, open, line }: { cx: number; cy: number; open: number; lin
 function BodyPattern({
   pattern,
   tone,
-  bodyRx,
+  cx,
+  cy,
+  rx,
+  ry,
+  curly,
 }: {
   pattern: BreedPreset['furPattern'];
   tone: string;
-  bodyRx: number;
-}) {
-  if (pattern === 'patch') {
-    return (
-      <Ellipse
-        cx={100 - bodyRx * 0.42}
-        cy={132}
-        rx={bodyRx * 0.5}
-        ry={22}
-        fill={tone}
-        opacity={0.85}
-      />
-    );
-  }
-  if (pattern === 'spotted') {
-    return (
-      <G opacity={0.5}>
-        <Circle cx={72} cy={140} r={8} fill={tone} />
-        <Circle cx={128} cy={152} r={6} fill={tone} />
-        <Circle cx={88} cy={176} r={5} fill={tone} />
-      </G>
-    );
-  }
-  return null;
+} & BodyShape) {
+  if (pattern === 'solid') return null;
+  const shape = (
+    <Blob cx={cx} cy={cy} rx={rx} ry={ry} curly={curly} bumps={16} amp={4.5} fill="#000" />
+  );
+
+  return (
+    <ClippedTo shape={shape}>
+      {pattern === 'patch' ? (
+        <Ellipse cx={100 - rx * 0.42} cy={132} rx={rx * 0.5} ry={22} fill={tone} opacity={0.85} />
+      ) : (
+        <G opacity={0.5}>
+          <Circle cx={72} cy={140} r={8} fill={tone} />
+          <Circle cx={128} cy={152} r={6} fill={tone} />
+          <Circle cx={88} cy={176} r={5} fill={tone} />
+        </G>
+      )}
+    </ClippedTo>
+  );
 }
+
+type BodyShape = { cx: number; cy: number; rx: number; ry: number; curly: boolean };
 
 /**
  * 얼굴 무늬.
@@ -682,15 +729,38 @@ function BodyPattern({
  * 한쪽 눈을 덮는 얼룩은 강아지 무늬 중 제일 알아보기 쉽습니다.
  * 머리통 다음, 눈보다 먼저 그려야 눈이 무늬 위에 얹힙니다.
  */
-function FacePattern({ pattern, tone }: { pattern: BreedPreset['furPattern']; tone: string }) {
+function FacePattern({
+  pattern,
+  tone,
+  curly,
+}: {
+  pattern: BreedPreset['furPattern'];
+  tone: string;
+  curly: boolean;
+}) {
   if (pattern !== 'patch') return null;
+  const shape = (
+    <Blob
+      cx={ANCHOR.head.x}
+      cy={ANCHOR.head.y}
+      rx={48}
+      ry={42}
+      curly={curly}
+      bumps={14}
+      amp={4.5}
+      fill="#000"
+    />
+  );
+
   return (
-    <G opacity={0.85}>
-      {/* 왼쪽 눈을 덮는 얼룩 */}
-      <Ellipse cx={76} cy={74} rx={22} ry={20} fill={tone} />
-      {/* 귀 쪽으로 이어지는 부분 */}
-      <Ellipse cx={64} cy={60} rx={14} ry={13} fill={tone} />
-    </G>
+    <ClippedTo shape={shape}>
+      <G opacity={0.85}>
+        {/* 왼쪽 눈을 덮는 얼룩 */}
+        <Ellipse cx={76} cy={74} rx={22} ry={20} fill={tone} />
+        {/* 귀 쪽으로 이어지는 부분 */}
+        <Ellipse cx={64} cy={60} rx={14} ry={13} fill={tone} />
+      </G>
+    </ClippedTo>
   );
 }
 
