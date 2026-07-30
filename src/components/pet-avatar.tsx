@@ -5,7 +5,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 import { FloatingEmojis } from '@/components/floating-emojis';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { Stage } from '@/lib/game';
+import type { CareActionId, Stage } from '@/lib/game';
 
 /** 반응의 종류. 종류마다 다르게 움직여야 결과가 구분됩니다. */
 export type ReactKind = 'care' | 'pat' | 'refused';
@@ -29,6 +29,11 @@ type PetAvatarProps = {
   reactEmoji?: string | null;
   /** 스탯이 많이 떨어졌으면 살짝 시무룩하게 보여줍니다. */
   sad?: boolean;
+  /**
+   * 지금 진행 중인 돌봄. 있으면 그 돌봄에 맞는 동작을 반복합니다
+   * (먹는 중 · 노는 중 · 씻는 중). 끝나면 null로 되돌려주세요.
+   */
+  activity?: CareActionId | null;
   /** 아바타를 누르면(쓰다듬으면) 호출됩니다. 없으면 눌리지 않습니다. */
   onPat?: () => void;
 };
@@ -49,6 +54,7 @@ export function PetAvatar({
   reactKind = 'care',
   reactEmoji = null,
   sad = false,
+  activity = null,
   onPat,
 }: PetAvatarProps) {
   const c = useTheme();
@@ -80,6 +86,43 @@ export function PetAvatar({
 
   const [pop] = useState(() => new Animated.Value(0));
   const [shake] = useState(() => new Animated.Value(0));
+  const [act] = useState(() => new Animated.Value(0));
+
+  /**
+   * 진행 중인 돌봄에 맞는 동작을 반복합니다.
+   *
+   * 돌봄마다 다르게 움직여야 무엇을 하고 있는지 보입니다 — 먹을 때는 고개를
+   * 까딱이고, 놀 때는 크게 뛰고, 씻을 때는 부르르 떱니다. 주기(period)만
+   * 바꿔서 세 동작의 속도를 구분했습니다.
+   */
+  useEffect(() => {
+    if (!activity) {
+      act.setValue(0);
+      return;
+    }
+
+    const period = activity === 'wash' ? 140 : activity === 'play' ? 420 : 300;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(act, {
+          toValue: 1,
+          duration: period,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(act, {
+          toValue: 0,
+          duration: period,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [activity, act]);
 
   // 반응이 오면 종류에 맞게 한 번 움직입니다.
   useEffect(() => {
@@ -113,18 +156,37 @@ export function PetAvatar({
 
   const popLift = reactKind === 'pat' ? -6 : -12;
 
+  // 진행 중 동작의 움직임 폭. 먹기는 고개 까딱(작게 아래로), 놀기는 점프,
+  // 씻기는 좌우 진동입니다.
+  const actLift = activity === 'play' ? -20 : activity === 'feed' ? 5 : 0;
+  const actShift = activity === 'wash' ? 5 : 0;
+  const actScale = activity === 'feed' ? 1.03 : 1;
+
   // 위로 튀는 폭은 말풍선 자리를 침범하지 않는 선까지만 (game.tsx의 bubbleSlot 참고).
   const translateY = Animated.add(
-    bounce.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }),
-    pop.interpolate({ inputRange: [0, 1], outputRange: [0, popLift] }),
+    Animated.add(
+      bounce.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }),
+      pop.interpolate({ inputRange: [0, 1], outputRange: [0, popLift] }),
+    ),
+    act.interpolate({ inputRange: [0, 1], outputRange: [0, actLift] }),
   );
-  const translateX = shake.interpolate({ inputRange: [-1, 1], outputRange: [-7, 7] });
-  const scale = pop.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, reactKind === 'pat' ? 1.04 : 1.08],
-  });
+  const translateX = Animated.add(
+    shake.interpolate({ inputRange: [-1, 1], outputRange: [-7, 7] }),
+    act.interpolate({ inputRange: [0, 1], outputRange: [-actShift, actShift] }),
+  );
+  const scale = Animated.multiply(
+    pop.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, reactKind === 'pat' ? 1.04 : 1.08],
+    }),
+    act.interpolate({ inputRange: [0, 1], outputRange: [1, actScale] }),
+  );
 
   const standSize = size + Spacing.xl;
+
+  // 진행 중인 돌봄 아이콘. CARE_ACTIONS의 이모지와 맞춰 둡니다.
+  const activityEmoji =
+    activity === 'feed' ? '🍚' : activity === 'play' ? '🎾' : activity === 'wash' ? '🫧' : null;
 
   return (
     <View style={styles.wrap}>
@@ -159,6 +221,14 @@ export function PetAvatar({
           )}
 
           {reactEmoji ? <FloatingEmojis emoji={reactEmoji} trigger={reactKey} /> : null}
+
+          {/* 진행 중인 돌봄을 아바타 옆에 아이콘으로도 표시합니다 */}
+          {activityEmoji ? (
+            <View
+              style={[styles.activityBadge, { backgroundColor: c.surface, borderColor: c.border }]}>
+              <Text style={styles.activityBadgeText}>{activityEmoji}</Text>
+            </View>
+          ) : null}
         </Animated.View>
       </Pressable>
 
@@ -202,5 +272,17 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     opacity: 0.6,
     marginTop: 2,
+  },
+  activityBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    borderWidth: 1,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+  },
+  activityBadgeText: {
+    fontSize: 16,
   },
 });

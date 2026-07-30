@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ActivityBar } from '@/components/activity-bar';
 import { Button } from '@/components/button';
 import { GrowthOverlay } from '@/components/growth-overlay';
 import { PetAvatar, type ReactKind } from '@/components/pet-avatar';
@@ -14,9 +15,16 @@ import { confirmAction } from '@/lib/dialog';
 import {
   CARE_ACTIONS,
   daysTogether,
+  DEPARTURE,
+  departureSecondsLeft,
   endingOf,
+  GameConfig,
+  hasDeparted,
   isCareOpen,
+  isPackingBags,
+  patStreakReaction,
   progressToNext,
+  sideEffectHint,
   STATS,
   stageOf,
   wishOf,
@@ -31,6 +39,9 @@ import { usePet } from '@/lib/pet';
 /** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
 const SAD_BELOW = 25;
 
+/** 이 간격 안에 다시 쓰다듬으면 "연달아 쓰다듬는 중"으로 봅니다. */
+const PAT_STREAK_WINDOW_MS = 1500;
+
 /**
  * 다마고치 게임 화면.
  *
@@ -44,7 +55,8 @@ export default function GameScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const { pet, isLoading, hatch, care, pat, release, skipStage } = usePet();
+  const { pet, isLoading, hatch, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
+    usePet();
 
   const params = useLocalSearchParams<{ breed?: string; photoUri?: string }>();
   const breedParam = typeof params.breed === 'string' ? params.breed : null;
@@ -62,6 +74,20 @@ export default function GameScreen() {
 
   /** 성장 축하 연출. 성장한 순간에만 채워집니다. */
   const [grewInto, setGrewInto] = useState<Stage | null>(null);
+
+  /**
+   * 진행 중인 돌봄. 버튼을 누르면 곧바로 끝나지 않고 여기에 들어가고,
+   * 진행 바가 다 차면 실제로 적용됩니다.
+   *
+   * 저장하지 않는 화면 상태입니다 — 앱을 닫으면 진행은 사라집니다. 진행 중인
+   * 것까지 저장하면 "껐다 켰더니 밥을 먹고 있다"를 다뤄야 해서, 미니 프로젝트
+   * 범위에서는 화면 안에서만 살게 두었습니다.
+   */
+  const [activity, setActivity] = useState<CareActionId | null>(null);
+
+  /** 연달아 쓰다듬은 횟수. 손을 떼면(1.5초) 초기화됩니다. */
+  const patStreak = useRef(0);
+  const lastPatAt = useRef(0);
 
   // 넘겨받은 품종으로 캐릭터를 만듭니다. 이미 키우는 중이면 그대로 둡니다.
   const hatching = useRef(false);
@@ -94,7 +120,20 @@ export default function GameScreen() {
     if (result.grewInto) setGrewInto(result.grewInto);
   }
 
-  async function handleCare(actionId: CareActionId) {
+  /**
+   * 돌봄을 시작합니다. 실제 적용은 진행 바가 끝날 때(finishCare)입니다.
+   *
+   * 진행 중에 다른 돌봄을 시작할 수 없게 막는 것이 연타 방지 역할을 겸합니다
+   * (쿨다운을 따로 두지 않은 이유 — components/activity-bar.tsx 참고).
+   */
+  function startCare(actionId: CareActionId) {
+    if (activity) return;
+    setActivity(actionId);
+  }
+
+  async function finishCare(actionId: CareActionId) {
+    setActivity(null);
+
     const result = await care(actionId);
     if (!result) return;
 
@@ -102,11 +141,30 @@ export default function GameScreen() {
     showResult(result, 'care', action?.emoji ?? '✨');
   }
 
+  /**
+   * 쓰다듬기. 횟수 제한이 없어서 돌봄이 진행 중이어도 누를 수 있습니다.
+   * 연달아 누르면 반응이 점점 커집니다(patStreakReaction).
+   */
   async function handlePat() {
+    const now = Date.now();
+    patStreak.current = now - lastPatAt.current < PAT_STREAK_WINDOW_MS ? patStreak.current + 1 : 1;
+    lastPatAt.current = now;
+
     const result = await pat();
     if (!result) return;
 
-    showResult(result, 'pat', '💗');
+    const streakText = patStreakReaction(patStreak.current);
+    showResult(streakText ? { ...result, message: streakText } : result, 'pat', '💗');
+  }
+
+  /**
+   * 떠난 뒤 처음부터 다시 시작합니다.
+   * 캐릭터를 지우고 사진 업로드 화면으로 보냅니다(확인 창은 띄우지 않습니다 —
+   * 이미 게임이 끝난 상태라 되돌릴 것이 없습니다).
+   */
+  async function handleStartOver() {
+    await release();
+    router.replace('/photo');
   }
 
   async function handleRelease() {
@@ -149,6 +207,35 @@ export default function GameScreen() {
     );
   }
 
+  /**
+   * 돌봄이 완전히 끊겨 캐릭터가 떠난 상태.
+   *
+   * 여기서 게임은 끝이고, 이어서 키울 수 있는 대상이 없습니다. 그래서 다른 UI를
+   * 보여주지 않고 배웅 화면만 띄운 뒤 사진 업로드부터 다시 시작하게 합니다.
+   */
+  if (hasDeparted(pet)) {
+    return (
+      <Screen center>
+        <Text style={styles.departEmoji}>{DEPARTURE.emoji}</Text>
+        <Text style={[styles.departTitle, { color: c.text }]}>{DEPARTURE.title}</Text>
+        <Text style={[styles.departBody, { color: c.textSecondary }]}>{DEPARTURE.message}</Text>
+
+        <View style={[styles.departRecord, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.departRecordText, { color: c.textSecondary }]}>
+            {pet.breed}와 함께한 {daysTogether(pet) + 1}일 · 돌봄 {pet.careCount}번 · 쓰다듬기{' '}
+            {pet.pats}번
+          </Text>
+        </View>
+
+        <Button
+          label="새 친구 만나기"
+          onPress={() => void handleStartOver()}
+          style={styles.departButton}
+        />
+      </Screen>
+    );
+  }
+
   const stage = stageOf(pet);
   const progress = progressToNext(pet);
   const ending = endingOf(pet);
@@ -159,6 +246,7 @@ export default function GameScreen() {
 
   const wish = careOpen ? wishOf(pet) : null;
   const wishAction = wish ? CARE_ACTIONS.find((a) => a.id === wish.actionId) : null;
+  const activityAction = activity ? CARE_ACTIONS.find((a) => a.id === activity) : null;
 
   // 조사는 단어에 따라 갈립니다("멍멍을" / "루비를") — lib/korean.ts
   const nickname = user?.nickname ?? '나';
@@ -203,11 +291,36 @@ export default function GameScreen() {
             reactKind={reaction?.kind ?? 'care'}
             reactEmoji={reaction?.emoji ?? null}
             sad={sad}
-            // 노년기에는 돌봄이 끝났으니 쓰다듬기도 닫습니다.
-            onPat={careOpen ? () => void handlePat() : undefined}
+            activity={activity}
+            // 쓰다듬기는 제한이 없습니다 — 노년기에도, 돌봄이 진행 중에도 됩니다.
+            onPat={() => void handlePat()}
           />
         </View>
       </View>
+
+      {isPackingBags(pet) ? (
+        // 떠나기 전에 반드시 경고합니다. 예고 없이 사라지면 버그로 보입니다.
+        <View style={[styles.depart, { backgroundColor: c.surface, borderColor: c.danger }]}>
+          <Text style={styles.departWarnEmoji}>🚪</Text>
+          <View style={styles.departWarnText}>
+            <Text style={[styles.departWarnTitle, { color: c.danger }]}>{DEPARTURE.warning}</Text>
+            <Text style={[styles.departWarnBody, { color: c.textSecondary }]}>
+              {departureSecondsLeft(pet)}초 안에 돌봐주지 않으면 여행을 떠나요
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {activityAction ? (
+        <ActivityBar
+          // 액션이 바뀌면 새로 시작해야 하므로 key를 붙입니다.
+          key={activityAction.id}
+          label={activityAction.activityLabel}
+          emoji={activityAction.emoji}
+          durationMs={activityAction.activityMs}
+          onDone={() => void finishCare(activityAction.id)}
+        />
+      ) : null}
 
       {wish && wishAction ? (
         <View style={[styles.wish, { backgroundColor: c.surface, borderColor: c.primary }]}>
@@ -264,27 +377,41 @@ export default function GameScreen() {
             {CARE_ACTIONS.map((action) => {
               // 지금 바라는 돌봄은 테두리를 강조해서 어디를 눌러야 할지 바로 보이게 합니다.
               const wanted = wish?.actionId === action.id;
+              // 무언가 진행 중이면 다른 돌봄은 시작할 수 없습니다.
+              const busy = activity !== null;
+              const running = activity === action.id;
 
               return (
                 <Pressable
                   key={action.id}
                   accessibilityRole="button"
                   accessibilityLabel={wanted ? `${action.label} (지금 바라는 것)` : action.label}
-                  onPress={() => void handleCare(action.id)}
+                  accessibilityState={{ disabled: busy, busy: running }}
+                  disabled={busy}
+                  onPress={() => startCare(action.id)}
                   style={({ pressed }) => [
                     styles.careButton,
                     {
                       backgroundColor: c.surface,
-                      borderColor: wanted ? c.primary : c.border,
-                      borderWidth: wanted ? 2.5 : 1.5,
+                      borderColor: running ? c.primary : wanted ? c.primary : c.border,
+                      borderWidth: running || wanted ? 2.5 : 1.5,
                     },
+                    // 진행 중에는 눌리지 않는다는 걸 흐리게 보여줍니다.
+                    busy && !running && styles.careDisabled,
                     pressed && styles.carePressed,
                   ]}>
                   <Text style={styles.careEmoji}>{action.emoji}</Text>
                   <Text style={[styles.careLabel, { color: c.text }]}>{action.label}</Text>
-                  {wanted ? (
+                  {running ? (
+                    <Text style={[styles.careWish, { color: c.primary }]}>진행 중</Text>
+                  ) : wanted ? (
                     <Text style={[styles.careWish, { color: c.primary }]}>바라는 중</Text>
-                  ) : null}
+                  ) : (
+                    // 대가를 누른 뒤에 알려주면 속은 기분이 듭니다. 먼저 보여줍니다.
+                    <Text style={[styles.careSide, { color: c.textSecondary }]}>
+                      {sideEffectHint(action) ?? ' '}
+                    </Text>
+                  )}
                 </Pressable>
               );
             })}
@@ -325,17 +452,67 @@ export default function GameScreen() {
       <Button label="대화하기 (준비 중)" variant="secondary" onPress={() => {}} disabled />
 
       {__DEV__ && (
-        // 발표 시연용. 개발 중에만 보입니다.
-        <Button
-          label="[개발용] 다음 단계로"
-          variant="ghost"
-          onPress={() => void skipStage()}
-          disabled={stage.id === 'elder'}
-        />
+        // 개발·발표 시연용. 개발 빌드에서만 보입니다.
+        // 시간을 실제로 흘려 기다리지 않고도 성장·방치·엔딩을 확인하려는 목적입니다.
+        <View style={[styles.dev, { borderColor: c.border }]}>
+          <Text style={[styles.devTitle, { color: c.textSecondary }]}>개발용 시연 도구</Text>
+
+          <View style={styles.devRow}>
+            <DevButton
+              label="다음 단계 →"
+              onPress={() => void skipStage()}
+              disabled={stage.id === 'elder'}
+            />
+            <DevButton label="영유아기로 ↺" onPress={() => void rewind()} />
+          </View>
+
+          <View style={styles.devRow}>
+            <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
+            <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
+            <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
+          </View>
+
+          <View style={styles.devRow}>
+            <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
+          </View>
+
+          <Text style={[styles.devNote, { color: c.textSecondary }]}>
+            지금 감소 배율 {GameConfig.decaySpeed}배 · 발표 전 1로 되돌리세요
+          </Text>
+        </View>
       )}
 
       {grewInto ? <GrowthOverlay stage={grewInto} onDone={() => setGrewInto(null)} /> : null}
     </Screen>
+  );
+}
+
+/** 시연 도구의 작은 버튼. 개발 빌드에서만 쓰입니다. */
+function DevButton({
+  label,
+  onPress,
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const c = useTheme();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`개발용: ${label}`}
+      style={({ pressed }) => [
+        styles.devButton,
+        { borderColor: c.border, backgroundColor: c.surfaceAlt },
+        disabled && styles.careDisabled,
+        pressed && styles.carePressed,
+      ]}>
+      <Text style={[styles.devButtonText, { color: c.textSecondary }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -500,6 +677,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     fontWeight: '800',
   },
+  careSide: {
+    fontSize: FontSize.caption,
+    opacity: 0.7,
+  },
   growth: {
     marginTop: Spacing.lg,
     gap: Spacing.xs,
@@ -606,6 +787,94 @@ const styles = StyleSheet.create({
   carePressed: {
     opacity: 0.7,
     transform: [{ scale: 0.97 }],
+  },
+  careDisabled: {
+    opacity: 0.45,
+  },
+  departEmoji: {
+    fontSize: 56,
+    marginBottom: Spacing.md,
+  },
+  departTitle: {
+    fontSize: FontSize.title,
+    fontWeight: '800',
+  },
+  departBody: {
+    fontSize: FontSize.body,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  departRecord: {
+    marginTop: Spacing.lg,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  departRecordText: {
+    fontSize: FontSize.caption,
+    textAlign: 'center',
+  },
+  departButton: {
+    alignSelf: 'stretch',
+    marginTop: Spacing.xl,
+  },
+  depart: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    borderWidth: 2,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  departWarnEmoji: {
+    fontSize: 22,
+  },
+  departWarnText: {
+    flex: 1,
+  },
+  departWarnTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  departWarnBody: {
+    fontSize: FontSize.caption,
+    marginTop: 2,
+  },
+  dev: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  devTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  devRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  devButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+  },
+  devButtonText: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+  },
+  devNote: {
+    fontSize: FontSize.caption,
+    opacity: 0.7,
   },
   careEmoji: {
     fontSize: 26,

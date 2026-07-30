@@ -14,7 +14,10 @@ import {
   applyCare,
   applyPat,
   createPet,
+  forceDeparture,
   normalizePet,
+  rewindToBaby,
+  setStats,
   skipToNextStage,
   type CareActionId,
   type CareResult,
@@ -53,6 +56,12 @@ type PetContextValue = {
   release: () => Promise<void>;
   /** 발표 시연용. 다음 단계로 즉시 넘깁니다. */
   skipStage: () => Promise<void>;
+  /** 발표 시연용. 영유아기로 되돌립니다(함께한 기록은 남습니다). */
+  rewind: () => Promise<void>;
+  /** 발표 시연용. 스탯을 원하는 값으로 맞춥니다(0으로 방치 상태 확인). */
+  forceStats: (value: number) => Promise<void>;
+  /** 발표 시연용. 유예 시간을 기다리지 않고 바로 여행을 떠나게 합니다. */
+  forceDepart: () => Promise<void>;
 };
 
 const PetContext = createContext<PetContextValue | null>(null);
@@ -152,9 +161,42 @@ export function PetProvider({ children }: { children: ReactNode }) {
     await commit(advance(skipToNextStage(current)));
   }, [commit]);
 
+  const rewind = useCallback(async () => {
+    const current = petRef.current;
+    if (!current) return;
+    await commit(rewindToBaby(current));
+  }, [commit]);
+
+  const forceStats = useCallback(
+    async (value: number) => {
+      const current = petRef.current;
+      if (!current) return;
+      // 스탯만 바꾸고 시간 경과는 건드리지 않습니다(setStats가 lastTickAt을 맞춰줍니다).
+      await commit(setStats(current, value));
+    },
+    [commit],
+  );
+
+  const forceDepart = useCallback(async () => {
+    const current = petRef.current;
+    if (!current) return;
+    await commit(forceDeparture(current));
+  }, [commit]);
+
   const value = useMemo(
-    () => ({ pet, isLoading, hatch, care, pat, release, skipStage }),
-    [pet, isLoading, hatch, care, pat, release, skipStage],
+    () => ({
+      pet,
+      isLoading,
+      hatch,
+      care,
+      pat,
+      release,
+      skipStage,
+      rewind,
+      forceStats,
+      forceDepart,
+    }),
+    [pet, isLoading, hatch, care, pat, release, skipStage, rewind, forceStats, forceDepart],
   );
 
   return <PetContext.Provider value={value}>{children}</PetContext.Provider>;
