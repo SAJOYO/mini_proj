@@ -28,7 +28,12 @@ import { synthesize, type PersonaCard } from '@/lib/persona';
 export type CharacterResult = {
   /** 성격 카드. 대사·결과 화면이 읽는 것 */
   card: PersonaCard;
-  /** 판정 원본 (mix·시도 횟수·소요 시간). mix 는 저장 대상입니다 */
+  /**
+   * 판정 원본. mix · 얼굴 관찰(face) · 품종별 근거(reasons) · 시도 횟수 · 소요 시간.
+   *
+   * 저장 대상은 mix 와 face/reasons 입니다. mix 로 성격은 언제든 다시 만들 수 있지만
+   * face/reasons 는 모델이 그때 쓴 문장이라 다시 만들 수 없습니다.
+   */
   inference: InferBreedMixResult;
 };
 
