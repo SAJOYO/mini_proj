@@ -100,6 +100,16 @@ export type BreedPreset = {
   tailLength: number;
   /** 몸통 가로/세로 비율. 클수록 닥스훈트처럼 길쭉해집니다 */
   bodyRatio: number;
+  /**
+   * 머리 크기 배율. 없으면 1.
+   * 얼굴만 키우고 몸은 그대로 두고 싶을 때 씁니다(둥글게 미용한 비숑).
+   */
+  headSize?: number;
+  /**
+   * 머리 가로/세로 비율. 없으면 기본 타원(48/42 ≈ 1.14).
+   * 1이면 완전한 원이 됩니다.
+   */
+  headRatio?: number;
   /** 기본 털색 */
   furColor: string;
   /**
@@ -295,8 +305,13 @@ export const BREEDS = {
     earAngle: 122,
     earLength: 0,
     snoutLength: 0.75,
-    tailCurl: 0.7,
+    // 코기처럼 뭉툭하게 — 둥근 털뭉치가 엉덩이 옆으로 살짝만 보입니다
+    tailCurl: 0.75,
+    tailLength: 0.3,
     bodyRatio: 1,
+    // 둥글게 미용한 머리 — 완전한 원에, 몸에 비해 큼직합니다
+    headSize: 1.12,
+    headRatio: 1,
     // 새하얗고 둥근 곱슬 솜뭉치
     furColor: '#F7F3EC',
     furPattern: 'solid',

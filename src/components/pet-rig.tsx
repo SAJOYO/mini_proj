@@ -351,7 +351,14 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
 
   // 머리 크기 배율. 아기는 머리가 커서 뽀짝합니다. 머리 중심을 축으로
   // 귀·눈·주둥이까지 통째로 키우거나 줄입니다.
-  const headScale = stage.headScale;
+  // 품종의 머리 크기는 단계 배율에 곱해서 그룹 transform에 태웁니다.
+  // 그래야 눈·주둥이·귀까지 같이 커져서 "얼굴이 크다"로 읽힙니다.
+  // 머리통 도형만 키우면 이목구비가 한가운데 몰려 이상해집니다.
+  const headScale = stage.headScale * (preset.headSize ?? 1);
+
+  // 머리 가로/세로. headRatio가 1이면 완전한 원입니다.
+  const headRx = 48;
+  const headRy = headRx / (preset.headRatio ?? 48 / 42);
 
   const rawEyeOpen =
     blinkEnabled && blinking ? 0 : (frozen?.eyeOpen ?? spec?.eyeOpen ?? REST_POSE.eyeOpen);
@@ -569,12 +576,13 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               </>
             )}
 
-            {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
+            {/* 머리통 — 보통은 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다.
+                headRatio가 1인 품종(둥글게 미용한 비숑)만 완전한 원이 됩니다. */}
             <Blob
               cx={ANCHOR.head.x}
               cy={ANCHOR.head.y}
-              rx={48}
-              ry={42}
+              rx={headRx}
+              ry={headRy}
               curly={curly}
               bumps={14}
               amp={4.5}
@@ -584,7 +592,13 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
             />
 
             {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
-            <FacePattern pattern={preset.furPattern} tone={facePatch} curly={curly} />
+            <FacePattern
+              pattern={preset.furPattern}
+              tone={facePatch}
+              curly={curly}
+              rx={headRx}
+              ry={headRy}
+            />
 
             {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
             <AnimatedG animatedProps={muzzleProps}>
@@ -825,18 +839,23 @@ function FacePattern({
   pattern,
   tone,
   curly,
+  rx,
+  ry,
 }: {
   pattern: BreedPreset['furPattern'];
   tone: string;
   curly: boolean;
+  /** 머리통과 똑같은 치수여야 클립이 맞습니다 */
+  rx: number;
+  ry: number;
 }) {
   if (pattern !== 'patch') return null;
   const shape = (
     <Blob
       cx={ANCHOR.head.x}
       cy={ANCHOR.head.y}
-      rx={48}
-      ry={42}
+      rx={rx}
+      ry={ry}
       curly={curly}
       bumps={14}
       amp={4.5}
