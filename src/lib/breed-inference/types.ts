@@ -1,0 +1,52 @@
+import type { BreedMix } from '@/lib/persona';
+import { BREEDS, type BreedId } from '@/constants/pet';
+
+/** LLM 추론 후보. `neutral`은 애플리케이션 fallback이므로 제외합니다. */
+export type InferableBreedId = Exclude<BreedId, 'neutral'>;
+
+/** 캐릭터가 실제 지원하는 품종에서 추론 후보를 자동으로 만듭니다. */
+export const INFERABLE_BREED_IDS = (Object.keys(BREEDS) as BreedId[]).filter(
+  (id): id is InferableBreedId => id !== 'neutral',
+);
+
+export type BreedMixResponse = {
+  mix: {
+    breed: InferableBreedId;
+    ratio: number;
+  }[];
+};
+
+export type VisionImageInput = {
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp';
+  base64: string;
+};
+
+export type GenerateStructuredInput = {
+  model: string;
+  image: VisionImageInput;
+  prompt: string;
+  schema: Record<string, unknown>;
+};
+
+/**
+ * 서버가 출력 형식을 어디까지 강제해줄 수 있는지는 전송층의 관심사라
+ * `llm/structured.ts`가 정의합니다. 여기서는 편의상 다시 내보내기만 합니다.
+ */
+export type { StructuredOutputMode } from '@/lib/llm/structured';
+
+/** 공급자별 비전 LLM 요청 형식을 이 인터페이스 뒤로 숨깁니다. */
+export interface VisionLlmClient {
+  generateStructured(input: GenerateStructuredInput): Promise<unknown>;
+}
+
+export type InferBreedMixInput = {
+  model: string;
+  image: VisionImageInput;
+};
+
+export type InferBreedMixResult = {
+  mix: BreedMix;
+  elapsedMs: number;
+  /** 유효한 응답을 받기까지 걸린 호출 횟수. 1이면 첫 시도에 성공했습니다. */
+  attempts: number;
+};
