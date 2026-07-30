@@ -27,7 +27,7 @@
  * 비우면 됩니다. 이 파일과 클라이언트 코드는 그대로 둡니다.
  */
 
-import type { StructuredOutputMode } from '@/lib/breed-inference/types';
+import type { StructuredOutputMode } from '@/lib/llm/structured';
 
 /** 한 용도(판정 / 대화)에 필요한 설정 한 벌. */
 export type LlmTarget = {

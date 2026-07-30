@@ -18,12 +18,12 @@
  * 판정과 대화를 왜 나누는지는 `src/lib/llm/config.ts`의 `RAW` 설명에 있습니다.
  */
 
-import type { StructuredOutputMode } from '@/lib/breed-inference/types';
 import {
   DEFAULT_BASE_URL,
   describeTarget as describeTargetShared,
   type LlmTarget,
 } from '@/lib/llm/config';
+import type { StructuredOutputMode } from '@/lib/llm/structured';
 
 export type { LlmTarget };
 

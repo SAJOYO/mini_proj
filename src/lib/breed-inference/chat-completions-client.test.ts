@@ -3,11 +3,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  ChatCompletionsVisionClient,
-  extractJsonObject,
-} from '@/lib/breed-inference/chat-completions-client';
-import type { StructuredOutputMode } from '@/lib/breed-inference/types';
+import { ChatCompletionsVisionClient } from '@/lib/breed-inference/chat-completions-client';
+import type { StructuredOutputMode } from '@/lib/llm/structured';
 
 type Captured = { url: string; body: Record<string, unknown> };
 
@@ -100,16 +97,4 @@ test('코드 블록으로 감싸거나 설명을 붙여도 JSON을 긁어낸다'
   const { run } = stubClient(wrapped, { structuredOutput: 'prompt' });
 
   assert.deepEqual(await run(), { mix: [{ breed: 'shiba', ratio: 100 }] });
-});
-
-test('문자열 안의 중괄호를 깊이로 세지 않는다', () => {
-  assert.deepEqual(extractJsonObject('앞말 {"note":"{ 안 닫힌 괄호","ok":true} 뒷말'), {
-    note: '{ 안 닫힌 괄호',
-    ok: true,
-  });
-});
-
-test('JSON 객체가 없거나 닫히지 않으면 예외를 던진다', () => {
-  assert.throws(() => extractJsonObject('설명만 있습니다'), /찾지 못했습니다/);
-  assert.throws(() => extractJsonObject('{"mix":['), /닫히지 않았습니다/);
 });
