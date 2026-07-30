@@ -23,7 +23,8 @@ ${breedOptions}
 
 [출력 규칙]
 - 위 집합의 품종 ID만 사용한다.
-- 가장 닮은 품종을 1개 이상 3개 이하로 고른다.
+- 닮은 순서대로 정확히 3개를 고른다. 1순위만 뚜렷하고 나머지가 약해도
+  순위를 매겨 3개를 채운다. 닮음이 약한 품종은 ratio를 낮게 주면 된다.
 - 같은 품종을 중복하지 않는다.
 - ratio는 양의 수이며 모든 ratio의 합은 정확히 100이다.
 - confidence, 근거 설명, 추가 문장을 출력하지 않는다.
@@ -37,7 +38,10 @@ export const BREED_MIX_JSON_SCHEMA: Record<string, unknown> = {
   properties: {
     mix: {
       type: 'array',
-      minItems: 1,
+      // 3개를 요구합니다. 2개에서 멈추면 조합 폭이 좁아지고, 3순위가 사진마다
+      // 갈리는 만큼 개인화가 넓어집니다. 비율은 모델이 정하므로 닮음이 약한
+      // 3순위는 저절로 작은 지분을 받습니다.
+      minItems: 3,
       maxItems: 3,
       items: {
         type: 'object',

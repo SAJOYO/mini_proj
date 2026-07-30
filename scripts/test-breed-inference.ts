@@ -49,6 +49,7 @@ async function main() {
     `${JSON.stringify(
       {
         elapsedMs: result.elapsedMs,
+        attempts: result.attempts,
         mix: result.mix,
         persona: {
           archetype: persona.archetype,

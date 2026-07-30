@@ -51,7 +51,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write . && eslint . --fix",
-    "check": "npm run typecheck && npm run lint"
+    "check": "npm run typecheck && npm run lint",
+    "persona:raw": "tsx --env-file-if-exists=.env scripts/inspect-raw-inference.ts"
   },
   "engines": {
     "node": ">=20.19.4"

@@ -60,4 +60,6 @@ export type InferBreedMixInput = {
 export type InferBreedMixResult = {
   mix: BreedMix;
   elapsedMs: number;
+  /** 유효한 응답을 받기까지 걸린 호출 횟수. 1이면 첫 시도에 성공했습니다. */
+  attempts: number;
 };
