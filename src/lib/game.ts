@@ -59,6 +59,10 @@ export type CareAction = {
   reaction: string;
   /** 이미 가득 차 있어서 거절할 때 하는 말. */
   refusal: string;
+  /** 이걸 소원으로 요청할 때 하는 말 (미니 이벤트 배너에 뜹니다). */
+  wishAsk: string;
+  /** 소원이 이뤄졌을 때 하는 말. */
+  wishGrantedReaction: string;
 };
 
 /**
@@ -73,6 +77,8 @@ export const CARE_ACTIONS: readonly CareAction[] = [
     stat: 'hunger',
     reaction: '냠냠! 잘 먹었어요',
     refusal: '지금은 배가 불러요',
+    wishAsk: '맛있는 거 먹고 싶어요!',
+    wishGrantedReaction: '기다린 밥이라 더 맛있어요!',
   },
   {
     id: 'play',
@@ -81,6 +87,8 @@ export const CARE_ACTIONS: readonly CareAction[] = [
     stat: 'happiness',
     reaction: '신난다! 더 놀아요',
     refusal: '지금은 충분히 즐거워요',
+    wishAsk: '산책 가고 싶어요!',
+    wishGrantedReaction: '기다렸어요! 정말 즐거웠어요',
   },
   {
     id: 'wash',
@@ -89,8 +97,25 @@ export const CARE_ACTIONS: readonly CareAction[] = [
     stat: 'clean',
     reaction: '깨끗해져서 기분 좋아요',
     refusal: '지금은 아주 깨끗해요',
+    wishAsk: '몸이 찝찝해요...',
+    wishGrantedReaction: '개운해요! 씻고 싶었어요',
   },
 ];
+
+/**
+ * 쓰다듬었을 때 하는 말. 아바타를 누르면 이 중 하나가 랜덤으로 나옵니다.
+ * 같은 말이 계속 나오면 반응이 없는 것처럼 느껴져서 풀로 두었습니다.
+ */
+export const PAT_REACTIONS: readonly string[] = [
+  '기분 좋아요...',
+  '헤헤, 더 해주세요',
+  '손길이 좋아요',
+  '골골골...',
+  '눈을 감고 있어요',
+];
+
+/** 행복이 이미 가득할 때 쓰다듬으면 하는 말. */
+export const PAT_FULL_REACTION = '이미 기분이 최고예요!';
 
 /* ------------------------------------------------------------------ */
 /* 설정값 (숫자는 전부 여기)                                            */
@@ -139,6 +164,29 @@ export const GameConfig = {
 
   /** 엔딩 점수에서 "충분히 돌봤다"고 보는 누적 돌봄 횟수. */
   careCountTarget: 40,
+
+  /**
+   * 쓰다듬기(아바타 누르기)의 행복 회복량과 경험치.
+   *
+   * 돌봄(25/10)보다 작게 잡았습니다. 쓰다듬기는 "언제든 부담 없이 하는 상호작용"
+   * 이라 보상이 크면 밥·놀이·목욕을 고를 이유가 없어집니다.
+   * 행복이 가득 차면 더 이상 오르지 않으니 무한정 쌓이지도 않습니다.
+   */
+  patGain: 5,
+  patExp: 2,
+
+  /**
+   * 소원(미니 이벤트). 캐릭터가 먼저 "산책 가고 싶어요"처럼 특정 돌봄을 요청하고,
+   * 들어주면 경험치를 더 줍니다. 가만히 기다리는 게임에 먼저 말 거는 순간을
+   * 넣으려는 장치입니다.
+   */
+  wishEveryMs: 60_000,
+  /** 소원이 이 시간 안에 안 이뤄지면 조용히 사라집니다(실패 페널티는 없음). */
+  wishTtlMs: 120_000,
+  /** 주기가 됐을 때 소원이 실제로 생길 확률. 1이면 매번 생깁니다. */
+  wishChance: 0.6,
+  /** 소원을 들어줬을 때 추가로 주는 경험치. */
+  wishBonusExp: 15,
 } as const;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
@@ -212,6 +260,8 @@ export type Pet = {
   exp: number;
   /** 누적 돌봄 횟수. 엔딩 점수에 씁니다. */
   careCount: number;
+  /** 누적 쓰다듬은 횟수. 기록 카드에 보여줍니다(엔딩 점수에는 넣지 않습니다). */
+  pats: number;
   stats: Stats;
   /**
    * 스탯 감소를 마지막으로 계산한 시각(ms).
@@ -233,6 +283,17 @@ export type Pet = {
   ending: EndingId | null;
   /** 엔딩이 확정된 시각(ISO 8601). 아직이면 null. */
   endedAt: string | null;
+  /** 지금 캐릭터가 바라는 것. 없으면 null. */
+  wish: Wish | null;
+  /** 마지막 소원이 이뤄지거나 사라진 시각(ms). 다음 소원 간격의 기준. */
+  lastWishEndedAt: number;
+};
+
+/** 캐릭터가 먼저 요청하는 돌봄. */
+export type Wish = {
+  actionId: CareActionId;
+  /** 요청한 시각(ms). 여기서 wishTtlMs가 지나면 사라집니다. */
+  askedAt: number;
 };
 
 export function createPet(breed: string, photoUri: string | null, now: number = Date.now()): Pet {
@@ -242,11 +303,30 @@ export function createPet(breed: string, photoUri: string | null, now: number = 
     bornAt: new Date(now).toISOString(),
     exp: 0,
     careCount: 0,
+    pats: 0,
     stats: { ...GameConfig.initialStats },
     lastTickAt: now,
     timeWarpMs: 0,
     ending: null,
     endedAt: null,
+    wish: null,
+    lastWishEndedAt: now,
+  };
+}
+
+/**
+ * 저장소에서 읽은 캐릭터를 지금 버전의 Pet으로 맞춥니다.
+ *
+ * 필드를 새로 추가하면 **이전에 저장된 캐릭터에는 그 값이 없습니다.** 그대로 쓰면
+ * `pet.pats`가 undefined가 되어 화면에 "NaN번"이 찍히거나 계산이 깨집니다.
+ * 새 필드를 넣을 때마다 여기에 기본값을 한 줄 추가하세요.
+ */
+export function normalizePet(raw: Pet, now: number = Date.now()): Pet {
+  return {
+    ...raw,
+    pats: raw.pats ?? 0,
+    wish: raw.wish ?? null,
+    lastWishEndedAt: raw.lastWishEndedAt ?? now,
   };
 }
 
@@ -348,12 +428,64 @@ export function applyDecay(pet: Pet, now: number = Date.now()): Pet {
   return { ...pet, stats, lastTickAt: now };
 }
 
+/* ------------------------------------------------------------------ */
+/* 소원 (미니 이벤트)                                                   */
+/* ------------------------------------------------------------------ */
+
+/** 아직 살아있는 소원. 시간이 지나 사라졌으면 null. */
+export function wishOf(pet: Pet, now: number = Date.now()): Wish | null {
+  if (!pet.wish) return null;
+  if (now - pet.wish.askedAt > GameConfig.wishTtlMs) return null;
+  return pet.wish;
+}
+
+/** 소원이 사라지기까지 남은 초. 소원이 없으면 0. */
+export function wishSecondsLeft(pet: Pet, now: number = Date.now()): number {
+  const wish = wishOf(pet, now);
+  if (!wish) return 0;
+  return Math.max(0, Math.ceil((GameConfig.wishTtlMs - (now - wish.askedAt)) / 1000));
+}
+
 /**
- * 시간 경과를 한 번에 반영합니다: 스탯 감소 → 노년기면 엔딩 확정.
+ * 소원을 만들거나 만료시킵니다.
+ *
+ * 이 함수만 랜덤을 씁니다(그래서 rand를 인자로 받습니다 — 테스트에서 고정할 수
+ * 있게 하려는 것입니다). 나머지 규칙은 전부 결정적입니다.
+ */
+export function rollWish(
+  pet: Pet,
+  now: number = Date.now(),
+  rand: () => number = Math.random,
+): Pet {
+  // 노년기에는 돌봄이 끝났으니 소원도 없습니다.
+  if (!isCareOpen(pet, now)) {
+    return pet.wish ? { ...pet, wish: null, lastWishEndedAt: now } : pet;
+  }
+
+  if (pet.wish) {
+    // 시간이 지난 소원은 조용히 사라집니다. 실패 페널티는 두지 않았습니다 —
+    // 잠깐 앱을 닫은 것까지 벌하면 부담스러운 게임이 됩니다.
+    if (now - pet.wish.askedAt > GameConfig.wishTtlMs) {
+      return { ...pet, wish: null, lastWishEndedAt: now };
+    }
+    return pet;
+  }
+
+  if (now - pet.lastWishEndedAt < GameConfig.wishEveryMs) return pet;
+
+  // 주기가 됐지만 확률에서 떨어졌으면, 다음 주기에 다시 굴립니다.
+  if (rand() >= GameConfig.wishChance) return { ...pet, lastWishEndedAt: now };
+
+  const action = CARE_ACTIONS[Math.floor(rand() * CARE_ACTIONS.length)] ?? CARE_ACTIONS[0];
+  return { ...pet, wish: { actionId: action.id, askedAt: now } };
+}
+
+/**
+ * 시간 경과를 한 번에 반영합니다: 스탯 감소 → 소원 갱신 → 노년기면 엔딩 확정.
  * 저장 전에는 항상 이 함수를 거치세요(순서를 틀리면 엔딩 점수가 어긋납니다).
  */
-export function advance(pet: Pet, now: number = Date.now()): Pet {
-  return sealEnding(applyDecay(pet, now), now);
+export function advance(pet: Pet, now: number = Date.now(), rand?: () => number): Pet {
+  return sealEnding(rollWish(applyDecay(pet, now), now, rand), now);
 }
 
 export type CareResult = {
@@ -364,6 +496,12 @@ export type CareResult = {
   message: string;
   /** 이 돌봄으로 단계가 올랐으면 그 단계. */
   grewInto: Stage | null;
+  /** 이 돌봄으로 소원을 들어줬는지. 화면에서 보너스 연출에 씁니다. */
+  wishGranted: boolean;
+  /** 채워준 스탯. 거절됐거나 쓰다듬기면 null. 파티클을 어디에 띄울지 정할 때 씁니다. */
+  stat: StatId | null;
+  /** 이번에 실제로 얻은 경험치. 거절되면 0. */
+  gainedExp: number;
 };
 
 /** 돌봄 액션 하나를 적용합니다. 스탯이 이미 가득이면 거절합니다(연타 방지). */
@@ -381,21 +519,38 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
       applied: false,
       message: '이제는 곁에 있어주기만 해도 돼요',
       grewInto: null,
+      wishGranted: false,
+      stat: null,
+      gainedExp: 0,
     };
   }
 
   if (decayed.stats[action.stat] >= GameConfig.fullThreshold) {
-    return { pet: decayed, applied: false, message: action.refusal, grewInto: null };
+    return {
+      pet: decayed,
+      applied: false,
+      message: action.refusal,
+      grewInto: null,
+      wishGranted: false,
+      stat: null,
+      gainedExp: 0,
+    };
   }
+
+  // 지금 바라던 것이었다면 경험치를 더 줍니다.
+  const granted = wishOf(decayed, now)?.actionId === actionId;
+  const gainedExp = GameConfig.careExp + (granted ? GameConfig.wishBonusExp : 0);
 
   const next: Pet = {
     ...decayed,
-    exp: decayed.exp + GameConfig.careExp,
+    exp: decayed.exp + gainedExp,
     careCount: decayed.careCount + 1,
     stats: {
       ...decayed.stats,
       [action.stat]: clamp(decayed.stats[action.stat] + GameConfig.careGain, 0, 100),
     },
+    // 들어준 소원은 지웁니다. 다음 소원까지의 간격은 여기서부터 셉니다.
+    ...(granted ? { wish: null, lastWishEndedAt: now } : {}),
   };
 
   const after = stageOf(next, now);
@@ -404,8 +559,76 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
     // 이 돌봄으로 청년기를 넘어섰을 수도 있으니 엔딩 확정을 한 번 더 거칩니다.
     pet: sealEnding(next, now),
     applied: true,
-    message: action.reaction,
+    message: granted
+      ? `${action.wishGrantedReaction} (+${GameConfig.wishBonusExp} EXP)`
+      : action.reaction,
     grewInto: after.id === before.id ? null : after,
+    wishGranted: granted,
+    stat: action.stat,
+    gainedExp,
+  };
+}
+
+/**
+ * 쓰다듬기. 아바타를 누르면 실행됩니다.
+ *
+ * 돌봄 버튼과 달리 **아무 준비 없이 언제든 할 수 있는 상호작용**입니다. 그래서
+ * 보상을 작게(행복 +5, 경험치 +2) 두었습니다. 행복이 가득하면 아무것도 오르지
+ * 않고 다른 말만 하니, 계속 눌러서 경험치를 벌 수는 없습니다.
+ */
+export function applyPat(
+  pet: Pet,
+  now: number = Date.now(),
+  rand: () => number = Math.random,
+): CareResult {
+  const decayed = advance(pet, now, rand);
+  const before = stageOf(decayed, now);
+
+  if (before.id === 'elder') {
+    return {
+      pet: decayed,
+      applied: false,
+      message: '곁에 있어줘서 고마워요',
+      grewInto: null,
+      wishGranted: false,
+      stat: null,
+      gainedExp: 0,
+    };
+  }
+
+  if (decayed.stats.happiness >= GameConfig.fullThreshold) {
+    return {
+      pet: { ...decayed, pats: decayed.pats + 1 },
+      applied: false,
+      message: PAT_FULL_REACTION,
+      grewInto: null,
+      wishGranted: false,
+      stat: null,
+      gainedExp: 0,
+    };
+  }
+
+  const next: Pet = {
+    ...decayed,
+    exp: decayed.exp + GameConfig.patExp,
+    pats: decayed.pats + 1,
+    stats: {
+      ...decayed.stats,
+      happiness: clamp(decayed.stats.happiness + GameConfig.patGain, 0, 100),
+    },
+  };
+
+  const after = stageOf(next, now);
+  const message = PAT_REACTIONS[Math.floor(rand() * PAT_REACTIONS.length)] ?? PAT_REACTIONS[0];
+
+  return {
+    pet: sealEnding(next, now),
+    applied: true,
+    message,
+    grewInto: after.id === before.id ? null : after,
+    wishGranted: false,
+    stat: 'happiness',
+    gainedExp: GameConfig.patExp,
   };
 }
 

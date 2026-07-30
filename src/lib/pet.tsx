@@ -12,7 +12,9 @@ import {
 import {
   advance,
   applyCare,
+  applyPat,
   createPet,
+  normalizePet,
   skipToNextStage,
   type CareActionId,
   type CareResult,
@@ -45,6 +47,8 @@ type PetContextValue = {
   hatch: (breed: string, photoUri: string | null) => Promise<Pet>;
   /** 돌봄 액션 하나를 실행하고 결과(반응 메시지·성장 여부)를 돌려줍니다. */
   care: (actionId: CareActionId) => Promise<CareResult | null>;
+  /** 쓰다듬기(아바타 누르기). 행복이 조금 오릅니다. */
+  pat: () => Promise<CareResult | null>;
   /** 캐릭터를 지웁니다(처음부터 다시 키우기). */
   release: () => Promise<void>;
   /** 발표 시연용. 다음 단계로 즉시 넘깁니다. */
@@ -74,8 +78,9 @@ export function PetProvider({ children }: { children: ReactNode }) {
     loadPet<Pet>()
       .then((stored) => {
         if (cancelled || !stored) return;
-        // 앱을 껐던 사이에 흐른 시간을 한 번에 반영합니다(스탯 감소 + 엔딩 확정).
-        const caught = advance(stored);
+        // 예전 버전에서 저장된 캐릭터에는 새 필드가 없어서 먼저 기본값을 채웁니다.
+        // 앱을 껐던 사이에 흐른 시간도 한 번에 반영합니다(스탯 감소 + 엔딩 확정).
+        const caught = advance(normalizePet(stored));
         petRef.current = caught;
         setPet(caught);
         void savePet(caught);
@@ -125,6 +130,15 @@ export function PetProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const pat = useCallback(async () => {
+    const current = petRef.current;
+    if (!current) return null;
+
+    const result = applyPat(current);
+    await commit(result.pet);
+    return result;
+  }, [commit]);
+
   const release = useCallback(async () => {
     petRef.current = null;
     setPet(null);
@@ -139,8 +153,8 @@ export function PetProvider({ children }: { children: ReactNode }) {
   }, [commit]);
 
   const value = useMemo(
-    () => ({ pet, isLoading, hatch, care, release, skipStage }),
-    [pet, isLoading, hatch, care, release, skipStage],
+    () => ({ pet, isLoading, hatch, care, pat, release, skipStage }),
+    [pet, isLoading, hatch, care, pat, release, skipStage],
   );
 
   return <PetContext.Provider value={value}>{children}</PetContext.Provider>;
