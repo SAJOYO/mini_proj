@@ -50,8 +50,12 @@ export const BREEDS = {
   bichon: { label: '비숑프리제' },
   doberman: { label: '도베르만' },
   yorkshire: { label: '요크셔테리어' },
-  pointer: { label: '포인터' },
   greyhound: { label: '그레이하운드' },
+  // 게임 파트가 캐릭터를 가진 품종에 맞춰 추가했습니다.
+  // (`pointer`는 게임 쪽에 그림이 없어서 뺐습니다 — 판정에 나와도 띄울 게 없습니다.)
+  jindo: { label: '진돗개' },
+  pomeranian: { label: '포메라니안' },
+  cavalier: { label: '카발리에' },
 } as const satisfies Record<string, BreedRosterEntry>;
 
 export type BreedId = keyof typeof BREEDS;

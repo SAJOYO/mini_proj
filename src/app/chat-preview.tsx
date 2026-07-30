@@ -82,15 +82,19 @@ type Fixture = {
  */
 const FIXTURES: Fixture[] = [
   // 실제로 판정에서 나온 값. 나머지는 만든 값이라 이게 기준점입니다.
+  //
+  // 주의: 원래 3순위는 포인터 15 였는데, 게임 파트에 포인터 캐릭터가 없어서
+  // 로스터에서 뺐습니다(홍가연). 그 자리를 비글로 바꿔 끼운 값이라
+  // 엄밀히는 더 이상 "그대로의 실측"이 아닙니다. 1·2순위는 실측 그대로입니다.
   {
     id: 'measured',
-    label: '실측 dog1',
-    note: '판정이 실제로 뽑은 값 · 도베르만 55 / 그레이하운드 30 / 포인터 15',
+    label: '실측 dog1 (3순위만 대체)',
+    note: '판정 실측 · 도베르만 55 / 그레이하운드 30 + 비글 15(포인터 자리)',
     name: '단무',
     mix: [
       { breed: 'doberman', ratio: 55 },
       { breed: 'greyhound', ratio: 30 },
-      { breed: 'pointer', ratio: 15 },
+      { breed: 'beagle', ratio: 15 },
     ],
   },
 

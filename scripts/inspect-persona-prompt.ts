@@ -5,7 +5,7 @@
  *
  * API를 부르지 않습니다. 품종 혼합만 주면 주입될 내용이 전부 나옵니다.
  *
- *   npm run persona:prompt -- doberman:55 greyhound:30 pointer:15 [이름]
+ *   npm run persona:prompt -- doberman:55 greyhound:30 beagle:15 [이름]
  */
 
 import { AXES, AXIS_KEYS, synthesize, traitOf, type BreedMix } from '@/lib/persona';
