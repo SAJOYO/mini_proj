@@ -163,6 +163,23 @@ const BREED_AXES: Record<BreedId, Partial<Axes>> = {
   maltese: { attachment: 95, expression: 85, sensitivity: 92, curiosity: 40, optimism: 40 },
 
   corgi: { attachment: 55, expression: 78, sensitivity: 35, curiosity: 88, optimism: 82 },
+
+  // 작고 겁 많고 주인에게 집착합니다. 예민함이 제일 높은 품종
+  chihuahua: { attachment: 92, expression: 70, sensitivity: 95, curiosity: 35, optimism: 45 },
+
+  bichon: { attachment: 78, expression: 92, sensitivity: 55, curiosity: 50, optimism: 88 },
+
+  // 애착 높음 · 표현 낮음 — 주인에게는 붙지만 살갑지 않은 경비견
+  doberman: { attachment: 78, expression: 25, sensitivity: 72, curiosity: 58, optimism: 55 },
+
+  // 작지만 대담하고 자기 주장이 셉니다
+  yorkshire: { attachment: 65, expression: 85, sensitivity: 68, curiosity: 80, optimism: 62 },
+
+  // 사람과 짝을 이뤄 일하던 개. 활동적이고 웬만해선 안 흔들립니다
+  pointer: { attachment: 72, expression: 60, sensitivity: 22, curiosity: 92, optimism: 75 },
+
+  // 애착 낮음 · 표현 낮음 — 뛸 때만 폭발하고 평소엔 조용합니다
+  greyhound: { attachment: 40, expression: 22, sensitivity: 65, curiosity: 45, optimism: 60 },
 };
 
 /** 프리셋에 빠진 축을 기본값으로 채워서 완전한 축 묶음을 만듭니다. */
