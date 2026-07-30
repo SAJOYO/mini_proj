@@ -13,22 +13,26 @@ import { readFileSync } from 'node:fs';
 
 import { ChatCompletionsVisionClient } from '@/lib/breed-inference/chat-completions-client';
 import { BREED_INFERENCE_PROMPT, BREED_MIX_JSON_SCHEMA } from '@/lib/breed-inference/prompt';
+import { describeTarget, visionTarget } from './llm-env';
 
 async function main() {
   const path = process.argv[2];
   const runs = Number(process.argv[3] ?? 3);
   const base64 = readFileSync(path).toString('base64');
 
+  const t = visionTarget();
+  process.stdout.write(`판정: ${describeTarget(t)}
+`);
   const client = new ChatCompletionsVisionClient({
-    apiKey: process.env.LLM_API_KEY as string,
-    baseUrl: process.env.LLM_BASE_URL as string,
-    structuredOutput: 'prompt',
+    apiKey: t.apiKey,
+    baseUrl: t.baseUrl,
+    structuredOutput: t.structuredOutput,
   });
 
   for (let i = 1; i <= runs; i += 1) {
     try {
       const raw = await client.generateStructured({
-        model: process.env.LLM_MODEL as string,
+        model: t.model,
         image: { mimeType: 'image/jpeg', base64 },
         prompt: BREED_INFERENCE_PROMPT,
         schema: BREED_MIX_JSON_SCHEMA,
