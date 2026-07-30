@@ -33,7 +33,7 @@ export default function PetPreviewScreen() {
   const [scene, setScene] = useState<SceneKind>('room');
 
   const breeds = Object.keys(BREEDS) as BreedId[];
-  const sceneLabels: Record<SceneKind, string> = { room: '방', water: '물속', neutral: '뉴트럴' };
+  const sceneLabels: Record<SceneKind, string> = { room: '방', neutral: '뉴트럴' };
 
   return (
     <Screen scroll>

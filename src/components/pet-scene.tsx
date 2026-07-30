@@ -1,17 +1,6 @@
 import { useId, useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
-import {
-  Circle,
-  Defs,
-  Ellipse,
-  G,
-  Line,
-  LinearGradient,
-  Path,
-  Rect,
-  Stop,
-  Svg,
-} from 'react-native-svg';
+import { Defs, Ellipse, G, Line, LinearGradient, Path, Rect, Stop, Svg } from 'react-native-svg';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -22,15 +11,18 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
  * "무슨 동물이냐"에 따라 사는 공간이 다르므로, 배경도 전역 고정이 아니라
  * 매칭된 동물에 맞춰 갈아끼웁니다.
  *   - room    포유류(강아지·고양이…) → 방
- *   - water   수중 동물(금붕어·오징어…) → 물속 (어항이 아니라 화면 전체가 물속)
  *   - neutral 애매하거나 아직 전용 씬이 없는 경우 → 톤 있는 뉴트럴 (완전 백색 아님)
  *
  * 서식지를 중첩하지 않는 게 핵심입니다. 금붕어라고 "방 안에 어항"을 두는 게
  * 아니라 화면 전체를 물속으로 바꿉니다. 그래서 "방에 덩그러니 어항", "어항 속
  * 오징어" 같은 어색함이 애초에 생기지 않습니다.
+ *
+ * 여기에는 강아지 리그에 실제로 필요한 방·뉴트럴 둘만 둡니다.
+ * 물속·초원·숲·사막·하늘·극지 같은 확장 서식지는 `claude/scene-habitats-by-biome`
+ * 브랜치가 담당합니다. 닮은 동물 검색이 강아지 밖으로 넓어질 때 합칩니다.
  */
 
-export const SCENE_KINDS = ['room', 'water', 'neutral'] as const;
+export const SCENE_KINDS = ['room', 'neutral'] as const;
 export type SceneKind = (typeof SCENE_KINDS)[number];
 
 /** 아직 전용 씬을 못 정했을 때 쓸 기본 씬. */
@@ -94,7 +86,6 @@ type BackdropProps = { kind: SceneKind; w: number; h: number; dark: boolean };
 
 function Backdrop({ kind, w, h, dark }: BackdropProps) {
   if (kind === 'room') return <RoomScene w={w} h={h} dark={dark} />;
-  if (kind === 'water') return <WaterScene w={w} h={h} dark={dark} />;
   return <NeutralScene w={w} h={h} dark={dark} />;
 }
 
@@ -175,63 +166,6 @@ function RoomScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
           fill={c.pot}
         />
       </G>
-    </G>
-  );
-}
-
-/** 물속 — 위는 밝고 아래로 깊어지는 그라데이션 + 기포 + 해초. 어항이 아니라 탁 트인 물속. */
-function WaterScene({ w, h, dark }: { w: number; h: number; dark: boolean }) {
-  // 그라데이션 id는 인스턴스마다 유일해야 합니다. 웹에서는 모든 SVG가 한 문서를
-  // 공유해서, id가 겹치면 먼저 정의된 그라데이션이 덮어써집니다.
-  const gid = `water-${useId()}`;
-  const c = dark
-    ? { top: '#173A4A', bottom: '#081722', bubble: '#BFE0EE', weed: '#1E5A48' }
-    : { top: '#C4E8F4', bottom: '#2E86B8', bubble: '#FFFFFF', weed: '#2E8B6F' };
-  return (
-    <G>
-      <Defs>
-        <LinearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={c.top} />
-          <Stop offset="1" stopColor={c.bottom} />
-        </LinearGradient>
-      </Defs>
-      <Rect x={0} y={0} width={w} height={h} fill={`url(#${gid})`} />
-
-      {/* 수면 근처 빛 무리 */}
-      <Ellipse
-        cx={w * 0.3}
-        cy={h * 0.08}
-        rx={w * 0.3}
-        ry={h * 0.05}
-        fill={c.bubble}
-        opacity={0.12}
-      />
-      <Ellipse
-        cx={w * 0.75}
-        cy={h * 0.12}
-        rx={w * 0.22}
-        ry={h * 0.04}
-        fill={c.bubble}
-        opacity={0.1}
-      />
-
-      {/* 기포 */}
-      <Circle cx={w * 0.2} cy={h * 0.55} r={w * 0.02} fill={c.bubble} opacity={0.5} />
-      <Circle cx={w * 0.26} cy={h * 0.4} r={w * 0.013} fill={c.bubble} opacity={0.45} />
-      <Circle cx={w * 0.82} cy={h * 0.5} r={w * 0.017} fill={c.bubble} opacity={0.5} />
-      <Circle cx={w * 0.88} cy={h * 0.34} r={w * 0.011} fill={c.bubble} opacity={0.4} />
-
-      {/* 해초 — 바닥에서 올라오는 물결 */}
-      <Path
-        d={`M ${w * 0.12} ${h} Q ${w * 0.05} ${h * 0.78} ${w * 0.14} ${h * 0.62} Q ${w * 0.2} ${h * 0.78} ${w * 0.16} ${h}`}
-        fill={c.weed}
-        opacity={0.75}
-      />
-      <Path
-        d={`M ${w * 0.88} ${h} Q ${w * 0.96} ${h * 0.8} ${w * 0.86} ${h * 0.66} Q ${w * 0.8} ${h * 0.82} ${w * 0.84} ${h}`}
-        fill={c.weed}
-        opacity={0.75}
-      />
     </G>
   );
 }
