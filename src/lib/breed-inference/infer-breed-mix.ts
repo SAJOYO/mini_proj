@@ -1,10 +1,11 @@
+import { resolveMix } from '@/constants/persona';
 import { BREED_INFERENCE_PROMPT, BREED_MIX_JSON_SCHEMA } from '@/lib/breed-inference/prompt';
 import type {
   InferBreedMixInput,
   InferBreedMixResult,
   VisionLlmClient,
 } from '@/lib/breed-inference/types';
-import { validateBreedMixResponse } from '@/lib/breed-inference/validate';
+import { parseBreedMixResponse } from '@/lib/breed-inference/validate';
 
 /** 사진 한 장을 실제 `BreedMix`로 변환합니다. */
 export async function inferBreedMix(
@@ -20,7 +21,7 @@ export async function inferBreedMix(
   });
 
   return {
-    mix: validateBreedMixResponse(raw),
+    mix: resolveMix(parseBreedMixResponse(raw)),
     elapsedMs: Date.now() - startedAt,
   };
 }

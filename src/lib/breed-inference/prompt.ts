@@ -1,10 +1,9 @@
-import { BREED_CATALOG, INFERABLE_BREED_IDS } from '@/constants/breed-catalog';
+import { BREEDS } from '@/constants/pet';
+import { INFERABLE_BREED_IDS } from '@/lib/breed-inference/types';
 
 export const BREED_INFERENCE_PROMPT_VERSION = '1';
 
-const catalogText = BREED_CATALOG.map(
-  ({ id, label, visualDescription }) => `- ${id} (${label}): ${visualDescription}`,
-).join('\n');
+const breedOptions = INFERABLE_BREED_IDS.map((id) => `- ${id} (${BREEDS[id].label})`).join('\n');
 
 /**
  * 사진을 품종 비율로 바꾸는 유도 프롬프트.
@@ -16,11 +15,11 @@ export const BREED_INFERENCE_PROMPT = `첨부된 사용자 사진을 보고, 아
 
 이 작업은 엔터테인먼트용 반려동물 캐릭터와 챗봇 페르소나 생성에 사용된다.
 정답을 맞히는 분류 작업이 아니므로 한 품종으로 단정할 필요가 없다.
-사진에서 직접 보이는 얼굴 윤곽, 눈매, 입매, 표정과 전체적인 시각적 인상을 종합하라.
+사진에서 직접 보이는 시각적 특징과 전체적인 인상을 종합하라.
 사용자의 실제 성격, 지능, 건강 상태나 민감한 특성은 추론하지 마라.
 
 [품종 집합]
-${catalogText}
+${breedOptions}
 
 [출력 규칙]
 - 위 집합의 품종 ID만 사용한다.
