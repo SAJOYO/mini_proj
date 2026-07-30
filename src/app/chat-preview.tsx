@@ -24,6 +24,7 @@ import {
 import { BREEDS } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { chatTarget } from '@/lib/llm/config';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
 
 /**
@@ -51,12 +52,13 @@ import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/
  * 지워지지 않아서, 같은 말에 대한 답을 나란히 비교할 수 있습니다.
  *
  * ── 키에 대하여 ──────────────────────────────────────
- * Expo는 `EXPO_PUBLIC_*` 만 번들에 넣습니다. 그리고 번들에 들어간 값은
- * 앱을 열어보면 보입니다(README의 API 키 섹션 참고).
+ * 설정 읽기는 `src/lib/llm/config.ts` 한 곳에 모여 있습니다. 접두사가 왜
+ * 필요한지, 왜 이름을 손으로 나열해야 하는지, 번들에 값이 박힌다는 경고까지
+ * 거기 적어뒀습니다. 이 화면은 결과만 받아 씁니다.
  *
- * 지금은 `EXPO_PUBLIC_CHAT_BASE_URL` 을 공급자로 직접 두고 있어서 키가
- * 노출되는 B안 형태입니다. 프록시를 두는 A안으로 가면 이 화면 코드는
- * 그대로 두고 `BASE_URL`을 프록시 주소로 바꾸고 키를 비우면 됩니다.
+ * 지금은 공급자를 직접 부르는 B안 형태입니다. 프록시를 두는 A안으로 가면
+ * 이 화면과 클라이언트는 그대로 두고 `.env`의 `BASE_URL`만 프록시 주소로
+ * 바꾸고 키를 비우면 됩니다.
  */
 
 type Fixture = {
@@ -157,10 +159,9 @@ const FIXTURES: Fixture[] = [
   },
 ];
 
-// Expo가 번들에 넣으려면 이렇게 통째로 적어야 합니다. 동적 접근은 치환되지 않습니다.
-const CHAT_API_KEY = process.env.EXPO_PUBLIC_CHAT_API_KEY;
-const CHAT_MODEL = process.env.EXPO_PUBLIC_CHAT_MODEL;
-const CHAT_BASE_URL = process.env.EXPO_PUBLIC_CHAT_BASE_URL;
+// 키가 하나라도 비어 있으면 `null`입니다. 던지지 않는 게 중요합니다 —
+// 모듈 로드 시점에 예외가 나면 화면이 아예 안 뜹니다.
+const CHAT = chatTarget();
 
 type Message = ChatTurn & { failed?: boolean };
 
@@ -211,22 +212,19 @@ export default function ChatPreviewScreen() {
   const busy = useRef(false);
   const scroller = useRef<ScrollView>(null);
 
-  const configured = Boolean(CHAT_API_KEY && CHAT_MODEL && CHAT_BASE_URL);
+  const configured = CHAT !== null;
 
   const client = useMemo(
     () =>
-      configured
-        ? new ChatCompletionsPersonaClient({
-            apiKey: CHAT_API_KEY as string,
-            baseUrl: CHAT_BASE_URL as string,
-          })
+      CHAT
+        ? new ChatCompletionsPersonaClient({ apiKey: CHAT.apiKey, baseUrl: CHAT.baseUrl })
         : null,
-    [configured],
+    [],
   );
 
   async function send(raw: string) {
     const text = raw.trim();
-    if (!text || !client || busy.current) return;
+    if (!text || !client || !CHAT || busy.current) return;
     busy.current = true;
 
     // 지금 이 표본을 붙잡아 둡니다. 답을 기다리는 동안 스왑해도 여기로 들어갑니다.
@@ -245,7 +243,7 @@ export default function ChatPreviewScreen() {
 
     try {
       const answer = await client.reply({
-        model: CHAT_MODEL as string,
+        model: CHAT.model,
         card,
         name: target.name,
         history,
@@ -305,7 +303,7 @@ export default function ChatPreviewScreen() {
         onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: true })}>
         {!configured && (
           <Text style={[styles.notice, { color: c.danger }]}>
-            {'.env.local 에 EXPO_PUBLIC_CHAT_API_KEY / _MODEL / _BASE_URL 을 넣고\n'}
+            {'.env 에 EXPO_PUBLIC_CHAT_API_KEY / _MODEL / _BASE_URL 을 넣고\n'}
             개발 서버를 다시 띄워주세요.
           </Text>
         )}
