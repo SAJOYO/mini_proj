@@ -311,12 +311,16 @@ export const BREEDS = {
     label: '도베르만',
     group: 2,
     earAngle: 16,
-    earLength: 1.1,
-    snoutLength: 1.3,
+    // 단이한 귀는 유난히 길고 뾰족하게 섭니다
+    earLength: 1.45,
+    // 좁고 긴 주둥이
+    snoutLength: 1.45,
     tailCurl: 0.15,
     // 단미 — 꼬리가 짧습니다
     tailLength: 0.5,
-    bodyRatio: 1.15,
+    // 근육질이지만 군살이 없어 옆으로 퍼지지 않습니다. 넓게 잡았더니
+    // 도베르만이 아니라 마스티프처럼 보였습니다.
+    bodyRatio: 0.9,
     // 온몸이 검고, 주둥이·가슴·발만 붉은 갈색(탄 포인트).
     // 얼룩으로 흉내내면 "검은 개에 갈색 반점"이 되는데, 실제로는 반점이 아니라
     // 정해진 자리에만 들어가는 무늬라 pointColor로 처리합니다.
@@ -406,14 +410,18 @@ export const BREEDS = {
     label: '진돗개',
     group: 5,
     earAngle: 12,
-    earLength: 0.95,
-    // 주둥이가 길고 곧게 뻗은 쐐기형 얼굴
-    snoutLength: 1.15,
+    // 시바보다 귀가 크고 주둥이가 깁니다. 둘 다 5그룹이라 이 차이를 벌려두지
+    // 않으면 색을 빼고 나면 구분이 안 됩니다.
+    earLength: 1.05,
+    snoutLength: 1.25,
     // 등에 딱 붙게 말리는 꼬리가 진돗개의 큰 특징입니다
     tailCurl: 0.95,
     tailLength: 0.9,
-    bodyRatio: 1,
-    furColor: '#D69C4F',
+    // 다부지지만 군살 없는 체형 — 몸통을 좁게 잡습니다
+    bodyRatio: 0.86,
+    // 백구. 말티즈(#F2EDE4)보다 따뜻한 상아빛으로 잡아 겹치지 않게 했습니다.
+    // 어차피 쫑긋한 귀와 말린 꼬리라 흰 토이견들과 헷갈리지 않습니다.
+    furColor: '#F6F0E4',
     furPattern: 'solid',
   },
 
@@ -422,39 +430,19 @@ export const BREEDS = {
     ...NEUTRAL_BREED,
     label: '포메라니안',
     group: 5,
-    // 털에 반쯤 파묻힌 작고 쫑긋한 귀
+    // 털에 반쯤 파묻힌 작고 쫑긋한 삼각 귀
     earAngle: 15,
-    earLength: 0.55,
+    earLength: 0.6,
     // 짧고 뾰족한 여우 주둥이
     snoutLength: 0.75,
     // 등 위로 활짝 펼쳐 얹히는 깃털 꼬리
     tailCurl: 1,
     tailLength: 0.85,
-    bodyRatio: 0.95,
+    // 몸집보다 털이 커서 옆으로 부푼 실루엣
+    bodyRatio: 1.08,
     furColor: '#E8C48D',
     furPattern: 'solid',
     // 곱슬은 아니지만, 물결치는 윤곽이 이 크기에서는 복슬복슬함으로 읽힙니다
-    furTexture: 'curly',
-  },
-
-  // 5그룹 — 포메라니안 곰돌이컷. 같은 품종을 미용만 다르게 한 변형입니다.
-  // 머리를 동그란 공처럼 다듬고 귀를 짧게 남겨, 얼굴만 진한 주황이고
-  // 몸은 밝은 크림으로 갈립니다.
-  pomeranianTeddy: {
-    ...NEUTRAL_BREED,
-    label: '포메(곰돌이컷)',
-    group: 5,
-    // 미용으로 거의 안 보이게 다듬은 귀
-    earAngle: 15,
-    earLength: 0.35,
-    // 곰인형처럼 뭉툭하게 눌린 주둥이
-    snoutLength: 0.6,
-    tailCurl: 1,
-    tailLength: 0.8,
-    bodyRatio: 0.95,
-    furColor: '#F2E6D2',
-    faceColor: '#D89A4E',
-    furPattern: 'solid',
     furTexture: 'curly',
   },
 } as const satisfies Record<string, BreedPreset>;

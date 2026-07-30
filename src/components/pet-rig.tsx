@@ -308,6 +308,12 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   const curly = preset.furTexture === 'curly';
   const longHair = preset.furTexture === 'long';
 
+  // 곱슬 품종이라도 **곧게 선 귀**는 뾰족한 삼각으로 둡니다.
+  // 선 귀의 모양은 털이 아니라 연골이 잡는 것이라, 털이 아무리 복슬복슬해도
+  // 실루엣은 뾰족합니다. 포메라니안이 여기 해당하는데, 둥근 덩어리로 그렸더니
+  // 쫑긋한 귀가 사라져 곰인형이 됐습니다. 늘어진 귀(푸들)만 덩어리로 갑니다.
+  const blobEar = curly && preset.earAngle > 90;
+
   // 품종·단계 숫자를 실제 치수로 변환
   const bodyScale = stage.bodyScale;
   const bodyRx = (44 + (preset.bodyRatio - 1) * 10) * bodyScale;
@@ -540,7 +546,7 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
                   anchor={ANCHOR.earLeft}
                   animatedProps={earLeftProps}
                   length={earLength}
-                  curly={curly}
+                  curly={blobEar}
                   longHair={longHair}
                   outerSide={-1}
                   tipRound={earTipRound}
@@ -552,7 +558,7 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
                   anchor={ANCHOR.earRight}
                   animatedProps={earRightProps}
                   length={earLength}
-                  curly={curly}
+                  curly={blobEar}
                   longHair={longHair}
                   outerSide={1}
                   tipRound={earTipRound}
