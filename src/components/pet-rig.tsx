@@ -741,33 +741,40 @@ function mouthPath(muzzleCy: number, muzzleRy: number, open: number): string {
 }
 
 /**
+ * 색 문자열을 [r, g, b]로. `#RRGGBB`와 `rgb(...)`를 모두 받습니다.
+ *
+ * 두 형식을 다 받는 게 중요합니다. 아래 색 함수들은 서로의 결과를 다시
+ * 입력으로 받는데(fade → shade), 여기서 반환하는 건 전부 `rgb(...)`입니다.
+ * 한쪽 형식만 파싱하면 두 번째 함수에서 NaN이 되고, 그 뒤로 모든 파생색이
+ * 검정으로 무너집니다.
+ */
+function parseColor(c: string): [number, number, number] {
+  if (c.startsWith('#')) {
+    const n = parseInt(c.slice(1), 16);
+    if (Number.isNaN(n)) return [0, 0, 0];
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const m = c.match(/\d+/g);
+  return m && m.length >= 3 ? [Number(m[0]), Number(m[1]), Number(m[2])] : [0, 0, 0];
+}
+
+const clamp255 = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+
+/**
  * 색을 밝게/어둡게. amount가 음수면 어두워집니다.
  * 품종 색 하나에서 외곽선·귀 안쪽·가슴털 색을 파생시키는 데 씁니다.
  */
-function shade(hex: string, amount: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  const r = clamp(((n >> 16) & 255) + amount);
-  const g = clamp(((n >> 8) & 255) + amount);
-  const b = clamp((n & 255) + amount);
-  return `rgb(${r}, ${g}, ${b})`;
+function shade(color: string, amount: number): string {
+  const [r, g, b] = parseColor(color);
+  return `rgb(${clamp255(r + amount)}, ${clamp255(g + amount)}, ${clamp255(b + amount)})`;
 }
 
-/** 두 16진 색을 t(0~1)만큼 섞습니다. t=0이면 a, t=1이면 b. */
+/** 두 색을 t(0~1)만큼 섞습니다. t=0이면 a, t=1이면 b. */
 function mix(a: string, b: string, t: number): string {
-  const parse = (c: string) => {
-    // rgb(...) 문자열도, #RRGGBB 도 모두 받습니다.
-    const m = c.match(/\d+/g);
-    if (c.startsWith('#')) {
-      const n = parseInt(c.replace('#', ''), 16);
-      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    }
-    return m ? m.slice(0, 3).map(Number) : [0, 0, 0];
-  };
-  const [ar, ag, ab] = parse(a);
-  const [br, bg, bb] = parse(b);
+  const [ar, ag, ab] = parseColor(a);
+  const [br, bg, bb] = parseColor(b);
   const k = Math.max(0, Math.min(1, t));
-  const lerp = (x: number, y: number) => Math.round(x + (y - x) * k);
+  const lerp = (x: number, y: number) => clamp255(x + (y - x) * k);
   return `rgb(${lerp(ar, br)}, ${lerp(ag, bg)}, ${lerp(ab, bb)})`;
 }
 
@@ -776,6 +783,6 @@ function mix(a: string, b: string, t: number): string {
  * amount가 0이면 원래 털색, 1에 가까울수록 흐린 회백색으로 바랩니다.
  * 품종 색이 아예 지워지지 않도록 최대 섞임을 절반 정도로 눌러 둡니다.
  */
-function fade(hex: string, amount: number): string {
-  return mix(hex, '#D8D3CA', amount * 0.5);
+function fade(color: string, amount: number): string {
+  return mix(color, '#D8D3CA', amount * 0.5);
 }
