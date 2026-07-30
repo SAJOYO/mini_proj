@@ -1,0 +1,22 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# Env secrets
+backend/.env
+
+# SQLite DB
+backend/chat_history.db
+
+# Node / Expo
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/npm-debug.*
+mobile/*.log
+
+# OS
+.DS_Store
+Thumbs.db
