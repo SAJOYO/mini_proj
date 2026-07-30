@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider } from '@/lib/auth';
+import { PetProvider } from '@/lib/pet';
 
 // 네이티브 스플래시를 JS가 뜰 때까지 붙잡아 둡니다.
 // (흰 화면이 깜빡이는 걸 막는 용도이고, 실제 로딩 UI는 app/index.tsx가 담당합니다.)
@@ -51,17 +52,19 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <ThemeProvider value={isDark ? navDark : navLight}>
-          <StatusBar style={isDark ? 'light' : 'dark'} />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: {
-                backgroundColor: isDark ? Colors.dark.background : Colors.light.background,
-              },
-            }}
-          />
-        </ThemeProvider>
+        <PetProvider>
+          <ThemeProvider value={isDark ? navDark : navLight}>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: {
+                  backgroundColor: isDark ? Colors.dark.background : Colors.light.background,
+                },
+              }}
+            />
+          </ThemeProvider>
+        </PetProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const Keys = {
   user: '@pet/user',
   photoUri: '@pet/photoUri',
+  pet: '@pet/pet',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -45,7 +46,7 @@ export async function saveUser(user: User): Promise<void> {
 }
 
 export async function clearUser(): Promise<void> {
-  await AsyncStorage.multiRemove([Keys.user, Keys.photoUri]);
+  await AsyncStorage.multiRemove([Keys.user, Keys.photoUri, Keys.pet]);
 }
 
 /** 사용자가 고른 사진의 로컬 URI. 아직 안 골랐으면 null. */
@@ -59,4 +60,22 @@ export async function savePhotoUri(uri: string): Promise<void> {
 
 export async function clearPhotoUri(): Promise<void> {
   await AsyncStorage.removeItem(Keys.photoUri);
+}
+
+/**
+ * 키우고 있는 캐릭터의 상태. 아직 안 만들었으면 null.
+ *
+ * 타입을 game.ts에서 가져오지 않고 제네릭으로 받는 이유는, 저장소가 게임 규칙을
+ * 몰라도 되게 하려는 것입니다(반대 방향 의존은 lib/pet.tsx가 담당).
+ */
+export async function loadPet<T>(): Promise<T | null> {
+  return readJson<T>(Keys.pet);
+}
+
+export async function savePet(pet: unknown): Promise<void> {
+  await writeJson(Keys.pet, pet);
+}
+
+export async function clearPet(): Promise<void> {
+  await AsyncStorage.removeItem(Keys.pet);
 }

@@ -6,6 +6,7 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
+import { usePet } from '@/lib/pet';
 
 /** 저장소를 아무리 빨리 읽어도 이 시간만큼은 로딩 화면을 보여줍니다(깜빡임 방지). */
 const MIN_SPLASH_MS = 1400;
@@ -13,14 +14,16 @@ const MIN_SPLASH_MS = 1400;
 /**
  * 로딩 화면 (앱 진입점).
  *
- * 로컬에 저장된 로그인 정보를 읽어보고
- *   - 있으면 → /photo
- *   - 없으면 → /start
+ * 로컬에 저장된 로그인 정보와 캐릭터를 읽어보고
+ *   - 로그인 + 키우는 캐릭터 있음 → /game
+ *   - 로그인만 되어 있음         → /photo
+ *   - 로그인 안 됨               → /start
  * 로 보냅니다.
  */
 export default function LoadingScreen() {
   const c = useTheme();
   const { user, isLoading } = useAuth();
+  const { pet, isLoading: petLoading } = usePet();
   const [minTimePassed, setMinTimePassed] = useState(false);
 
   // useState의 지연 초기화로 Animated.Value를 딱 한 번만 만듭니다.
@@ -54,9 +57,11 @@ export default function LoadingScreen() {
     return () => loop.stop();
   }, [bounce]);
 
-  const ready = !isLoading && minTimePassed;
+  const ready = !isLoading && !petLoading && minTimePassed;
   if (ready) {
-    return <Redirect href={user ? '/photo' : '/start'} />;
+    // 이미 키우는 캐릭터가 있으면 사진 화면을 건너뛰고 바로 게임으로
+    if (user) return <Redirect href={pet ? '/game' : '/photo'} />;
+    return <Redirect href="/start" />;
   }
 
   const translateY = bounce.interpolate({ inputRange: [0, 1], outputRange: [0, -18] });

@@ -2,13 +2,16 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
+import { pickRandomBreed } from '@/lib/breeds';
+import { notify } from '@/lib/dialog';
+import { usePet } from '@/lib/pet';
 import { clearPhotoUri, loadPhotoUri, savePhotoUri } from '@/lib/storage';
 
 const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
@@ -28,9 +31,11 @@ export default function PhotoScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { release } = usePet();
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     // 이전에 골라둔 사진이 있으면 복원
@@ -52,7 +57,7 @@ export default function PhotoScreen() {
     try {
       await applyResult(await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS));
     } catch {
-      Alert.alert('사진을 불러오지 못했어요', '잠시 후 다시 시도해 주세요.');
+      notify('사진을 불러오지 못했어요', '잠시 후 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -63,12 +68,12 @@ export default function PhotoScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('카메라 권한이 필요해요', '설정에서 카메라 접근을 허용해 주세요.');
+        notify('카메라 권한이 필요해요', '설정에서 카메라 접근을 허용해 주세요.');
         return;
       }
       await applyResult(await ImagePicker.launchCameraAsync(PICKER_OPTIONS));
     } catch {
-      Alert.alert('카메라를 열지 못했어요', '잠시 후 다시 시도해 주세요.');
+      notify('카메라를 열지 못했어요', '잠시 후 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -79,7 +84,29 @@ export default function PhotoScreen() {
     await clearPhotoUri();
   }
 
+  /**
+   * 닮은 동물 분석 → 게임 화면으로.
+   *
+   * TODO(홍가연): 지금은 강아지 품종 하나를 **랜덤으로** 돌려주는 가짜 구현입니다.
+   * 실제 검색이 붙으면 pickRandomBreed() 자리에 분석 결과를 넣어주세요.
+   * 게임 쪽은 품종 문자열만 받으면 되므로 이 함수 안만 고치면 됩니다.
+   */
+  async function analyze() {
+    if (!photoUri) return;
+
+    setAnalyzing(true);
+    try {
+      // 분석하는 느낌만 내는 딜레이 (실제 검색이 붙으면 사라집니다)
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      router.push({ pathname: '/game', params: { breed: pickRandomBreed(), photoUri } });
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   async function handleSignOut() {
+    // 캐릭터도 함께 정리합니다 (다른 사람이 이어받는 상황을 막기 위해)
+    await release();
     await signOut();
     router.replace('/start');
   }
@@ -121,13 +148,13 @@ export default function PhotoScreen() {
       <View style={styles.actions}>
         {photoUri ? (
           <>
-            {/*
-              TODO(홍가연): 여기서 닮은 동물 찾기 화면으로 넘어갑니다.
-              photoUri를 넘겨서 분석 결과를 받아오면 됩니다.
-                router.push({ pathname: '/result', params: { photoUri } })
-            */}
-            <Button label="분석하기 (준비 중)" onPress={() => {}} disabled />
-            <Button label="다시 고르기" variant="secondary" onPress={removePhoto} disabled={busy} />
+            <Button label="분석하기" onPress={analyze} loading={analyzing} />
+            <Button
+              label="다시 고르기"
+              variant="secondary"
+              onPress={removePhoto}
+              disabled={busy || analyzing}
+            />
           </>
         ) : (
           <>
