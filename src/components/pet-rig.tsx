@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -8,14 +8,37 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { Circle, Ellipse, G, Path, Svg } from 'react-native-svg';
+import {
+  Circle,
+  ClipPath,
+  Defs,
+  Ellipse,
+  G,
+  Path,
+  RadialGradient,
+  Stop,
+  Svg,
+} from 'react-native-svg';
 
+import { Brush } from '@/components/brush';
 import {
   NEUTRAL_STAGE,
   type AnimationName,
   type BreedPreset,
   type StageModifier,
 } from '@/constants/pet';
+import {
+  fade,
+  furStrokes,
+  mix,
+  outlineFor,
+  PAINT_RECIPES,
+  pastelize,
+  seedFrom,
+  shade,
+  type PaintRecipe,
+  type PaintStyle,
+} from '@/lib/paint';
 
 /**
  * 반려동물 리그(rig) — 부위별로 쪼갠 캐릭터 구조.
@@ -200,9 +223,24 @@ export type PetRigProps = {
    * 개발 미리보기에서 자세 하나하나를 뜯어볼 때 씁니다.
    */
   pose?: Partial<PetPose>;
+  /**
+   * 얼마나 그림처럼 칠할지. flat → brush → painted → pastel 순으로 세집니다.
+   *
+   * flat이 아니면 부위 하나당 30여 개의 path가 늘어납니다. 주인공 한 마리를
+   * 크게 보여줄 땐 올리고, 썸네일을 여러 마리 늘어놓을 땐 flat이 낫습니다.
+   */
+  style?: PaintStyle;
 };
 
-export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }: PetRigProps) {
+export function PetRig({
+  preset,
+  stage = NEUTRAL_STAGE,
+  size,
+  animation,
+  pose,
+  style = 'flat',
+}: PetRigProps) {
+  const recipe = PAINT_RECIPES[style];
   const spec = animation ? MOTION[animation] : null;
   const frozen = pose ? { ...REST_POSE, ...pose } : null;
 
@@ -283,8 +321,10 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
 
   // 노년일수록 털이 희끗해집니다. 회색 쪽으로 살짝 섞되, 품종 색이
   // 알아볼 수 없을 만큼 지우지는 않습니다.
-  const fur = fade(preset.furColor, stage.furFade);
-  const line = shade(fur, -105);
+  // 파스텔 단계는 털색 자체를 밝은 쪽으로 끌어올립니다. 붓질만 알록달록하고
+  // 바탕이 진하면 색이 겉돌아, 물감 위에 색연필로 낙서한 것처럼 보입니다.
+  const fur = pastelize(fade(preset.furColor, stage.furFade), recipe.wash);
+  const line = outlineFor(fur);
   const inner = shade(fur, -55);
   const pale = shade(fur, 45);
   // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
@@ -293,6 +333,8 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // 노년은 눈동자가 뿌옇게 흐려집니다. 외곽선 색을 회청색 쪽으로 섞습니다.
   const eyeColor = mix(line, '#8FA0A6', stage.eyeCloudiness);
   const curly = preset.furTexture === 'curly';
+  // 같은 품종은 언제 그려도 같은 붓질이 나와야 합니다. 품종 라벨을 씨앗으로 씁니다.
+  const seed = seedFrom(preset.label);
 
   // 품종·단계 숫자를 실제 치수로 변환
   const bodyScale = stage.bodyScale;
@@ -391,7 +433,7 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
 
         {/* 몸통 */}
         <AnimatedG animatedProps={bodyProps}>
-          <Blob
+          <Painted
             cx={ANCHOR.body.x}
             cy={ANCHOR.body.y}
             rx={bodyRx}
@@ -402,19 +444,24 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
             fill={fur}
             stroke={line}
             strokeWidth={5}
-          />
-          {/* 가슴 털 */}
-          <Blob
-            cx={100}
-            cy={162}
-            rx={20 * bodyScale}
-            ry={26 * bodyScale}
-            curly={curly}
-            bumps={10}
-            amp={3}
-            fill={pale}
-          />
-          <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
+            recipe={recipe}
+            base={fur}
+            seed={seed + 11}
+            count={46}>
+            {/* 가슴 털과 무늬는 붓질보다 먼저 깔아, 한 번에 같이 덮이게 합니다.
+                따로 칠하면 가슴만 매끈해서 오려 붙인 것처럼 보입니다. */}
+            <Blob
+              cx={100}
+              cy={162}
+              rx={20 * bodyScale}
+              ry={26 * bodyScale}
+              curly={curly}
+              bumps={10}
+              amp={3}
+              fill={pale}
+            />
+            <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
+          </Painted>
         </AnimatedG>
 
         {/* 머리 — 목을 축으로 갸웃합니다. 귀·눈·코가 전부 이 안에 있습니다. */}
@@ -429,6 +476,8 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               animatedProps={earLeftProps}
               length={earLength}
               curly={curly}
+              recipe={recipe}
+              seed={seed + 3}
               {...{ fur, line, inner }}
             />
             <Ear
@@ -436,11 +485,13 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               animatedProps={earRightProps}
               length={earLength}
               curly={curly}
+              recipe={recipe}
+              seed={seed + 7}
               {...{ fur, line, inner }}
             />
 
             {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
-            <Blob
+            <Painted
               cx={ANCHOR.head.x}
               cy={ANCHOR.head.y}
               rx={48}
@@ -451,10 +502,13 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               fill={fur}
               stroke={line}
               strokeWidth={5}
-            />
-
-            {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
-            <FacePattern pattern={preset.furPattern} tone={patch} />
+              recipe={recipe}
+              base={fur}
+              seed={seed + 29}
+              count={34}>
+              {/* 얼굴 무늬 — 머리통 위, 눈보다 아래 */}
+              <FacePattern pattern={preset.furPattern} tone={patch} />
+            </Painted>
 
             {/* 주둥이 묶음 — 씹을 때 이 그룹이 통째로 흔들립니다 */}
             <AnimatedG animatedProps={muzzleProps}>
@@ -503,6 +557,10 @@ type EarProps = {
   fur: string;
   line: string;
   inner: string;
+  /** 회화 강도 */
+  recipe: PaintRecipe;
+  /** 붓질 씨앗. 좌우 귀가 똑같이 칠해지지 않도록 서로 다른 값을 줍니다 */
+  seed: number;
 };
 
 /**
@@ -512,41 +570,36 @@ type EarProps = {
  * 타원이 아니라 끝이 좁아지는 잎 모양이라, 세워도 늘어뜨려도 강아지 귀로 읽힙니다.
  * (타원으로 하면 곧게 세웠을 때 토끼가 됩니다.)
  */
-function Ear({ anchor, animatedProps, length, curly, fur, line, inner }: EarProps) {
+function Ear({ anchor, animatedProps, length, curly, fur, line, inner, recipe, seed }: EarProps) {
   // 곱슬 견종은 귀도 덥수룩한 덩어리로 그립니다. 잎 모양을 물결로 만드는 것보다
   // 귀 축을 따라 부풀린 덩어리를 얹는 쪽이 푸들 귀에 가깝습니다.
   const height = 42 * length;
+  const outer = curly
+    ? curlyEllipse(0, -height * 0.5, 15, height * 0.55, 11, 3.5)
+    : earPath(length, 1);
+  const innerShape = curly
+    ? curlyEllipse(0, -height * 0.5, 7, height * 0.3, 8, 2)
+    : earPath(length * 0.58, 0.5);
 
   return (
     <AnimatedG animatedProps={animatedProps}>
       <G transform={`translate(${anchor.x}, ${anchor.y})`}>
-        {curly ? (
-          <>
-            <Path
-              d={curlyEllipse(0, -height * 0.5, 15, height * 0.55, 11, 3.5)}
-              fill={fur}
-              stroke={line}
-              strokeWidth={5}
-              strokeLinejoin="round"
-            />
-            <Path
-              d={curlyEllipse(0, -height * 0.5, 7, height * 0.3, 8, 2)}
-              fill={inner}
-              strokeLinejoin="round"
-            />
-          </>
-        ) : (
-          <>
-            <Path
-              d={earPath(length, 1)}
-              fill={fur}
-              stroke={line}
-              strokeWidth={5}
-              strokeLinejoin="round"
-            />
-            <Path d={earPath(length * 0.58, 0.5)} fill={inner} />
-          </>
-        )}
+        <PaintedPath
+          d={outer}
+          fill={fur}
+          stroke={line}
+          strokeWidth={5}
+          recipe={recipe}
+          base={fur}
+          seed={seed}
+          // 귀는 좁고 길어서 붓이 몇 번만 지나가도 결이 읽힙니다.
+          count={10}
+          cx={0}
+          cy={-height * 0.5}
+          rx={curly ? 13 : 10}
+          ry={height * 0.44}>
+          <Path d={innerShape} fill={inner} strokeLinejoin="round" />
+        </PaintedPath>
       </G>
     </AnimatedG>
   );
@@ -565,6 +618,7 @@ type BlobProps = {
   fill: string;
   stroke?: string;
   strokeWidth?: number;
+  strokeOpacity?: number;
 };
 
 /**
@@ -576,6 +630,206 @@ function Blob({ cx, cy, rx, ry, curly, bumps = 13, amp = 4, ...paint }: BlobProp
     return <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...paint} />;
   }
   return <Path d={curlyEllipse(cx, cy, rx, ry, bumps, amp)} strokeLinejoin="round" {...paint} />;
+}
+
+/* ------------------------------------------------------------------ *
+ * 붓터치 질감
+ * ------------------------------------------------------------------ */
+
+type PaintProps = {
+  /** 회화 강도 묶음 */
+  recipe: PaintRecipe;
+  /** 붓질이 흔들릴 기준 색 */
+  base: string;
+  seed: number;
+  count?: number;
+  /** 실루엣 안쪽에 먼저 깔 것들(가슴털·무늬 등). 붓질이 이것까지 함께 덮습니다 */
+  children?: ReactNode;
+};
+
+type FurBox = { cx: number; cy: number; rx: number; ry: number };
+
+/**
+ * 칠하는 순서가 전부입니다.
+ *
+ *   바탕색 → 무늬 → 빛/그늘 → 붓질(실루엣으로 클립) → 외곽선
+ *
+ * 붓질을 외곽선보다 먼저 얹어야 실루엣이 또렷하게 남습니다. 순서를 뒤집으면
+ * 붓이 윤곽을 넘나들어 캐릭터가 뭉개집니다. 클립을 거는 이유도 같습니다.
+ */
+function usePaint(base: string, seed: number, count: number, recipe: PaintRecipe, box: FurBox) {
+  const uid = useId();
+  const strokes = useMemo(
+    () =>
+      recipe.texture
+        ? furStrokes({
+            cx: box.cx,
+            cy: box.cy,
+            rx: box.rx,
+            ry: box.ry,
+            base,
+            seed,
+            count,
+            chroma: recipe.chroma,
+            pastel: recipe.pastel,
+          })
+        : [],
+    [
+      recipe.texture,
+      recipe.chroma,
+      recipe.pastel,
+      box.cx,
+      box.cy,
+      box.rx,
+      box.ry,
+      base,
+      seed,
+      count,
+    ],
+  );
+  return { clipId: `paint-${uid}`, lightId: `lit-${uid}`, shadeId: `shd-${uid}`, strokes };
+}
+
+/**
+ * 빛과 그늘.
+ *
+ * 굵은 외곽선을 걷어내면 형태가 납작해집니다. 그 자리를 대신 채우는 게
+ * 빛 방향입니다. 왼쪽 위에서 따뜻한 빛이 오고 오른쪽 아래가 서늘하게
+ * 가라앉으면, 선 하나 없어도 덩어리가 둥글게 보입니다.
+ *
+ * 그늘을 검정으로 깔면 때가 낀 것처럼 됩니다. 실제 그늘은 하늘빛을 받아
+ * 푸르스름하므로 차가운 보라·남색 쪽으로 넣습니다.
+ */
+function Sheen({ lightId, shadeId, box }: { lightId: string; shadeId: string; box: FurBox }) {
+  const { cx, cy, rx, ry } = box;
+  return (
+    <>
+      <Defs>
+        {/* 빛은 흰색이 아니라 따뜻한 노란빛입니다. 흰색으로 밝히면
+            색이 빠져 허옇게 뜨기만 하고 빛으로 보이지 않습니다. */}
+        <RadialGradient id={lightId} cx="32%" cy="24%" r="70%">
+          <Stop offset="0" stopColor="#FFE3A0" stopOpacity={0.42} />
+          <Stop offset="1" stopColor="#FFE3A0" stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id={shadeId} cx="74%" cy="84%" r="64%">
+          <Stop offset="0" stopColor="#7C63A8" stopOpacity={0.42} />
+          <Stop offset="1" stopColor="#7C63A8" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={`url(#${shadeId})`} />
+      <Ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={`url(#${lightId})`} />
+    </>
+  );
+}
+
+/** 둥근 덩어리(머리·몸통)를 질감까지 포함해 칠합니다. */
+function Painted({
+  cx,
+  cy,
+  rx,
+  ry,
+  curly,
+  bumps,
+  amp,
+  fill,
+  stroke,
+  strokeWidth,
+  recipe,
+  base,
+  seed,
+  count = 28,
+  children,
+}: BlobProps & PaintProps) {
+  const box = { cx, cy, rx, ry };
+  const { clipId, lightId, shadeId, strokes } = usePaint(base, seed, count, recipe, box);
+  const geom = { cx, cy, rx, ry, curly, bumps, amp };
+  const outline = (strokeWidth ?? 5) * recipe.outlineWidth;
+
+  if (!recipe.texture) {
+    return (
+      <>
+        <Blob {...geom} fill={fill} stroke={stroke} strokeWidth={outline} />
+        {children}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Defs>
+        <ClipPath id={clipId}>
+          <Blob {...geom} fill="#000" />
+        </ClipPath>
+      </Defs>
+      <Blob {...geom} fill={fill} />
+      {children}
+      <G clipPath={`url(#${clipId})`}>
+        {recipe.sheen && <Sheen lightId={lightId} shadeId={shadeId} box={box} />}
+        <Brush strokes={strokes} />
+      </G>
+      {outline > 0 && (
+        <Blob
+          {...geom}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={outline}
+          strokeOpacity={recipe.outlineAlpha}
+        />
+      )}
+    </>
+  );
+}
+
+/** path로 정의된 부위(귀)를 질감까지 포함해 칠합니다. 클립 상자는 따로 받습니다. */
+function PaintedPath({
+  d,
+  fill,
+  stroke,
+  strokeWidth,
+  recipe,
+  base,
+  seed,
+  count = 12,
+  children,
+  ...box
+}: { d: string; fill: string; stroke: string; strokeWidth: number } & PaintProps & FurBox) {
+  const { clipId, lightId, shadeId, strokes } = usePaint(base, seed, count, recipe, box);
+  const outline = strokeWidth * recipe.outlineWidth;
+
+  if (!recipe.texture) {
+    return (
+      <>
+        <Path d={d} fill={fill} stroke={stroke} strokeWidth={outline} strokeLinejoin="round" />
+        {children}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Defs>
+        <ClipPath id={clipId}>
+          <Path d={d} />
+        </ClipPath>
+      </Defs>
+      <Path d={d} fill={fill} strokeLinejoin="round" />
+      {children}
+      <G clipPath={`url(#${clipId})`}>
+        {recipe.sheen && <Sheen lightId={lightId} shadeId={shadeId} box={box} />}
+        <Brush strokes={strokes} />
+      </G>
+      {outline > 0 && (
+        <Path
+          d={d}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={outline}
+          strokeOpacity={recipe.outlineAlpha}
+          strokeLinejoin="round"
+        />
+      )}
+    </>
+  );
 }
 
 /** 눈 하나. 뜬 정도에 따라 동그란 눈 ↔ 감은 선으로 바뀝니다. */
@@ -740,42 +994,6 @@ function mouthPath(muzzleCy: number, muzzleRy: number, open: number): string {
   return `M ${90} ${y} Q ${100} ${y + h} ${110} ${y} Q ${100} ${y + h * 0.35} ${90} ${y} Z`;
 }
 
-/**
- * 색을 밝게/어둡게. amount가 음수면 어두워집니다.
- * 품종 색 하나에서 외곽선·귀 안쪽·가슴털 색을 파생시키는 데 씁니다.
- */
-function shade(hex: string, amount: number): string {
-  const n = parseInt(hex.replace('#', ''), 16);
-  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  const r = clamp(((n >> 16) & 255) + amount);
-  const g = clamp(((n >> 8) & 255) + amount);
-  const b = clamp((n & 255) + amount);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-/** 두 16진 색을 t(0~1)만큼 섞습니다. t=0이면 a, t=1이면 b. */
-function mix(a: string, b: string, t: number): string {
-  const parse = (c: string) => {
-    // rgb(...) 문자열도, #RRGGBB 도 모두 받습니다.
-    const m = c.match(/\d+/g);
-    if (c.startsWith('#')) {
-      const n = parseInt(c.replace('#', ''), 16);
-      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    }
-    return m ? m.slice(0, 3).map(Number) : [0, 0, 0];
-  };
-  const [ar, ag, ab] = parse(a);
-  const [br, bg, bb] = parse(b);
-  const k = Math.max(0, Math.min(1, t));
-  const lerp = (x: number, y: number) => Math.round(x + (y - x) * k);
-  return `rgb(${lerp(ar, br)}, ${lerp(ag, bg)}, ${lerp(ab, bb)})`;
-}
-
-/**
- * 나이 들며 털이 희끗해지는 정도.
- * amount가 0이면 원래 털색, 1에 가까울수록 흐린 회백색으로 바랩니다.
- * 품종 색이 아예 지워지지 않도록 최대 섞임을 절반 정도로 눌러 둡니다.
- */
-function fade(hex: string, amount: number): string {
-  return mix(hex, '#D8D3CA', amount * 0.5);
-}
+// 색 계산(shade/mix/fade)은 배경 씬과 공유해야 해서 @/lib/paint로 옮겼습니다.
+// 예전에 여기 있던 shade는 '#RRGGBB'만 파싱했는데, fade가 'rgb(...)'를 돌려주면서
+// 모든 파생색이 NaN → 검정이 됐습니다. 이제 세 형식을 다 받습니다.

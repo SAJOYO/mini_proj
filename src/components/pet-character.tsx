@@ -13,6 +13,7 @@ import {
 } from '@/constants/pet';
 import { FontSize, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import type { PaintStyle } from '@/lib/paint';
 
 export type PetCharacterProps = {
   /** 닮은 동물 검색 결과로 정해지는 품종. 없으면 기본 형태로 그립니다. */
@@ -23,9 +24,11 @@ export type PetCharacterProps = {
   animation?: AnimationName;
   /** 캐릭터가 차지할 정사각형 한 변 길이(px). */
   size?: number;
+  /** 얼마나 그림처럼 칠할지. 크게 보여주는 주인공에만 올리세요. */
+  style?: PaintStyle;
   /** 품종·단계·동작 이름을 밑에 같이 보여줍니다. 개발 중 확인용. */
   debug?: boolean;
-  style?: ViewStyle;
+  containerStyle?: ViewStyle;
 };
 
 /**
@@ -42,8 +45,9 @@ export function PetCharacter({
   stage = DEFAULT_STAGE,
   animation = DEFAULT_ANIMATION,
   size = 180,
+  style = 'flat',
   debug = false,
-  style,
+  containerStyle,
 }: PetCharacterProps) {
   const c = useTheme();
   const preset = BREEDS[breed];
@@ -51,9 +55,9 @@ export function PetCharacter({
 
   return (
     <View
-      style={[styles.wrap, style]}
+      style={[styles.wrap, containerStyle]}
       accessibilityLabel={`${stageMod.label} ${preset.label} 캐릭터, ${animation}`}>
-      <PetRig preset={preset} stage={stageMod} size={size} animation={animation} />
+      <PetRig preset={preset} stage={stageMod} size={size} animation={animation} style={style} />
 
       {debug && (
         <View style={styles.caption}>

@@ -17,6 +17,7 @@ import {
 } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { PAINT_STYLES, type PaintStyle } from '@/lib/paint';
 
 /**
  * 캐릭터 확인용 개발 화면 (`/pet-preview`).
@@ -30,10 +31,16 @@ export default function PetPreviewScreen() {
   const [animation, setAnimation] = useState<AnimationName>('breathe');
   const [breed, setBreed] = useState<BreedId>('shiba');
   const [stage, setStage] = useState<LifeStage>('adult');
-  const [scene, setScene] = useState<SceneKind>('room');
+  const [scene, setScene] = useState<SceneKind>('meadow');
+  const [paint, setPaint] = useState<PaintStyle>('pastel');
 
   const breeds = Object.keys(BREEDS) as BreedId[];
-  const sceneLabels: Record<SceneKind, string> = { room: '방', water: '물속', neutral: '뉴트럴' };
+  const sceneLabels: Record<SceneKind, string> = {
+    room: '방',
+    water: '물속',
+    neutral: '뉴트럴',
+    meadow: '꽃밭',
+  };
 
   return (
     <Screen scroll>
@@ -43,14 +50,25 @@ export default function PetPreviewScreen() {
       </Text>
 
       <View style={styles.stage}>
-        <Scene kind={scene}>
-          <PetCharacter breed={breed} stage={stage} animation={animation} size={220} />
+        <Scene kind={scene} painterly={paint !== 'flat'}>
+          <PetCharacter
+            breed={breed}
+            stage={stage}
+            animation={animation}
+            size={220}
+            style={paint}
+          />
         </Scene>
       </View>
 
       <View style={styles.chips}>
         {SCENE_KINDS.map((s) => (
           <Chip key={s} label={sceneLabels[s]} active={s === scene} onPress={() => setScene(s)} />
+        ))}
+      </View>
+      <View style={styles.chips}>
+        {PAINT_STYLES.map((p) => (
+          <Chip key={p} label={PAINT_LABELS[p]} active={p === paint} onPress={() => setPaint(p)} />
         ))}
       </View>
       <View style={styles.chips}>
@@ -71,6 +89,27 @@ export default function PetPreviewScreen() {
             active={s === stage}
             onPress={() => setStage(s)}
           />
+        ))}
+      </View>
+
+      <Text style={[styles.heading, { color: c.text }]}>회화 강도</Text>
+      <Text style={[styles.note, { color: c.textSecondary }]}>
+        네 단계 모두 같은 리그, 같은 애니메이션입니다. 이미지 에셋은 한 장도 없습니다. 붓결(2단계)
+        보다 외곽선을 걷고 빛을 넣는 3단계에서 인상이 훨씬 크게 바뀝니다 — &ldquo;유화 같다&rdquo;는
+        느낌의 정체가 붓결이 아니라는 뜻입니다.
+      </Text>
+      <View style={styles.row}>
+        {PAINT_STYLES.map((p) => (
+          <View key={p} style={styles.cell}>
+            <PetRig
+              preset={BREEDS[breed]}
+              stage={LIFE_STAGES[stage]}
+              size={150}
+              animation="breathe"
+              style={p}
+            />
+            <Text style={[styles.caption, { color: c.text }]}>{PAINT_LABELS[p]}</Text>
+          </View>
         ))}
       </View>
 
@@ -141,6 +180,13 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
     </Pressable>
   );
 }
+
+const PAINT_LABELS: Record<PaintStyle, string> = {
+  flat: '1 단색',
+  brush: '2 붓결',
+  painted: '3 선 제거+빛',
+  pastel: '4 파스텔',
+};
 
 const FROZEN_POSES: { label: string; pose: Partial<PetPose> }[] = [
   { label: '기본', pose: {} },
