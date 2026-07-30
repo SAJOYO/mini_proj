@@ -52,7 +52,6 @@
     "lint": "eslint .",
     "format": "prettier --write . && eslint . --fix",
     "check": "npm run typecheck && npm run lint",
-    "persona:raw": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.persona scripts/inspect-raw-inference.ts",
     "persona:chat": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.persona scripts/test-persona-chat.ts",
     "persona:prompt": "tsx scripts/inspect-persona-prompt.ts"
   },
