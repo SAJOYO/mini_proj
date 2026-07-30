@@ -90,7 +90,7 @@ export type BreedPreset = {
    * 리그에서 귀 뿌리를 축으로 좌우 대칭 회전에 그대로 씁니다.
    */
   earAngle: number;
-  /** 귀 길이 배율. 1이 기본 */
+  /** 귀 길이 배율. 1이 기본. 0이면 귀를 아예 안 그립니다(미용으로 파묻힌 비숑) */
   earLength: number;
   /** 주둥이 길이 배율. 1이 기본 */
   snoutLength: number;
@@ -120,6 +120,13 @@ export type BreedPreset = {
    * 통째로 다른 색으로 칠하면 목에서 색이 뚝 끊겨 부자연스러워집니다.
    */
   saddleColor?: string;
+  /**
+   * 탄 포인트 색 — 주둥이·가슴·발에 들어가는 밝은 얼룩. 없으면 털색을 밝게 해서 씁니다.
+   *
+   * 도베르만처럼 "온몸은 검은데 주둥이·가슴·발만 갈색"인 품종을 위한 값입니다.
+   * 이 세 자리는 어느 품종에서든 같이 밝아지므로 한 값으로 묶습니다.
+   */
+  pointColor?: string;
   /** 무늬 종류 */
   furPattern: 'solid' | 'patch' | 'spotted';
   /**
@@ -283,9 +290,10 @@ export const BREEDS = {
     ...NEUTRAL_BREED,
     label: '비숑프리제',
     group: 9,
-    // 귀가 복슬복슬한 털에 파묻혀 아래로 처져 보입니다
+    // 둥글게 미용한 머리에 귀가 완전히 파묻혀, 실제로도 귀가 안 보입니다.
+    // 억지로 그리면 솜뭉치에서 잎사귀가 튀어나온 것처럼 됩니다.
     earAngle: 122,
-    earLength: 1,
+    earLength: 0,
     snoutLength: 0.75,
     tailCurl: 0.7,
     bodyRatio: 1,
@@ -309,9 +317,12 @@ export const BREEDS = {
     // 단미 — 꼬리가 짧습니다
     tailLength: 0.5,
     bodyRatio: 1.15,
-    furColor: '#3A2F2A',
-    // 눈 위·주둥이의 밝은 태닝 무늬를 얼룩으로 흉내 냅니다
-    furPattern: 'patch',
+    // 온몸이 검고, 주둥이·가슴·발만 붉은 갈색(탄 포인트).
+    // 얼룩으로 흉내내면 "검은 개에 갈색 반점"이 되는데, 실제로는 반점이 아니라
+    // 정해진 자리에만 들어가는 무늬라 pointColor로 처리합니다.
+    furColor: '#2B2422',
+    pointColor: '#8E5230',
+    furPattern: 'solid',
   },
   // 3그룹 — 요크셔테리어. 작은 몸에 쫑긋한 귀, 짧은 주둥이, 찰랑이는 실키 코트.
   yorkshire: {
@@ -386,6 +397,65 @@ export const BREEDS = {
     // 루비 컬러 — 따뜻한 밤색 단색
     furColor: '#B5713F',
     furPattern: 'solid',
+  },
+
+  // 5그룹 — 진돗개. 곧게 선 삼각 귀, 쐐기형 얼굴, 등 위로 단단히 말린 꼬리.
+  // 백구도 있지만 말티즈·비숑과 겹치지 않도록 황구로 잡았습니다.
+  jindo: {
+    ...NEUTRAL_BREED,
+    label: '진돗개',
+    group: 5,
+    earAngle: 12,
+    earLength: 0.95,
+    // 주둥이가 길고 곧게 뻗은 쐐기형 얼굴
+    snoutLength: 1.15,
+    // 등에 딱 붙게 말리는 꼬리가 진돗개의 큰 특징입니다
+    tailCurl: 0.95,
+    tailLength: 0.9,
+    bodyRatio: 1,
+    furColor: '#D69C4F',
+    furPattern: 'solid',
+  },
+
+  // 5그룹 — 포메라니안. 여우 같은 작은 얼굴에 몸집의 배는 되어 보이는 솜털.
+  pomeranian: {
+    ...NEUTRAL_BREED,
+    label: '포메라니안',
+    group: 5,
+    // 털에 반쯤 파묻힌 작고 쫑긋한 귀
+    earAngle: 15,
+    earLength: 0.55,
+    // 짧고 뾰족한 여우 주둥이
+    snoutLength: 0.75,
+    // 등 위로 활짝 펼쳐 얹히는 깃털 꼬리
+    tailCurl: 1,
+    tailLength: 0.85,
+    bodyRatio: 0.95,
+    furColor: '#E8C48D',
+    furPattern: 'solid',
+    // 곱슬은 아니지만, 물결치는 윤곽이 이 크기에서는 복슬복슬함으로 읽힙니다
+    furTexture: 'curly',
+  },
+
+  // 5그룹 — 포메라니안 곰돌이컷. 같은 품종을 미용만 다르게 한 변형입니다.
+  // 머리를 동그란 공처럼 다듬고 귀를 짧게 남겨, 얼굴만 진한 주황이고
+  // 몸은 밝은 크림으로 갈립니다.
+  pomeranianTeddy: {
+    ...NEUTRAL_BREED,
+    label: '포메(곰돌이컷)',
+    group: 5,
+    // 미용으로 거의 안 보이게 다듬은 귀
+    earAngle: 15,
+    earLength: 0.35,
+    // 곰인형처럼 뭉툭하게 눌린 주둥이
+    snoutLength: 0.6,
+    tailCurl: 1,
+    tailLength: 0.8,
+    bodyRatio: 0.95,
+    furColor: '#F2E6D2',
+    faceColor: '#D89A4E',
+    furPattern: 'solid',
+    furTexture: 'curly',
   },
 } as const satisfies Record<string, BreedPreset>;
 

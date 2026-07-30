@@ -284,7 +284,9 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // 노년일수록 털이 희끗해집니다. 회색 쪽으로 살짝 섞되, 품종 색이
   // 알아볼 수 없을 만큼 지우지는 않습니다.
   const fur = fade(preset.furColor, stage.furFade);
-  const pale = shade(fur, 45);
+  // 탄 포인트 — 주둥이·가슴·발. 지정이 없으면 예전처럼 털색을 밝혀 씁니다.
+  const point = preset.pointColor ? fade(preset.pointColor, stage.furFade) : null;
+  const pale = point ?? shade(fur, 45);
   // 무늬는 털색과 확실히 구분돼야 합니다. 살짝만 어둡게 하면
   // 무늬가 아니라 때 묻은 자국처럼 보입니다.
   const patch = shade(fur, -88);
@@ -293,7 +295,7 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // faceColor가 없으면 몸과 같은 색이라, 대부분 품종은 아래 값들이 위와 같습니다.
   const faceFur = fade(preset.faceColor ?? preset.furColor, stage.furFade);
   const faceInner = shade(faceFur, -55);
-  const facePale = shade(faceFur, 45);
+  const facePale = point ?? shade(faceFur, 45);
   const facePatch = shade(faceFur, -88);
 
   // 외곽선은 캐릭터 전체가 한 색이어야 합니다. 얼굴색과 몸색에서 각각 선을 뽑으면
@@ -529,31 +531,37 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
               (아기는 머리가 크고, 청소년은 살짝 작습니다.) */}
           <G
             transform={`translate(${ANCHOR.head.x}, ${ANCHOR.head.y}) scale(${headScale}) translate(${-ANCHOR.head.x}, ${-ANCHOR.head.y})`}>
-            {/* 귀: 머리보다 먼저 그려서 뒤로 보냅니다 */}
-            <Ear
-              anchor={ANCHOR.earLeft}
-              animatedProps={earLeftProps}
-              length={earLength}
-              curly={curly}
-              longHair={longHair}
-              outerSide={-1}
-              tipRound={earTipRound}
-              fur={faceFur}
-              line={faceLine}
-              inner={faceInner}
-            />
-            <Ear
-              anchor={ANCHOR.earRight}
-              animatedProps={earRightProps}
-              length={earLength}
-              curly={curly}
-              longHair={longHair}
-              outerSide={1}
-              tipRound={earTipRound}
-              fur={faceFur}
-              line={faceLine}
-              inner={faceInner}
-            />
+            {/* 귀: 머리보다 먼저 그려서 뒤로 보냅니다.
+                earLength가 0이면 아예 안 그립니다. 둥글게 미용해서 귀가 털에
+                완전히 파묻힌 비숑처럼, 귀가 안 보이는 게 정확한 품종이 있습니다. */}
+            {earLength > 0 && (
+              <>
+                <Ear
+                  anchor={ANCHOR.earLeft}
+                  animatedProps={earLeftProps}
+                  length={earLength}
+                  curly={curly}
+                  longHair={longHair}
+                  outerSide={-1}
+                  tipRound={earTipRound}
+                  fur={faceFur}
+                  line={faceLine}
+                  inner={faceInner}
+                />
+                <Ear
+                  anchor={ANCHOR.earRight}
+                  animatedProps={earRightProps}
+                  length={earLength}
+                  curly={curly}
+                  longHair={longHair}
+                  outerSide={1}
+                  tipRound={earTipRound}
+                  fur={faceFur}
+                  line={faceLine}
+                  inner={faceInner}
+                />
+              </>
+            )}
 
             {/* 머리통 — 세로보다 가로가 살짝 넓어야 강아지로 읽힙니다 */}
             <Blob
