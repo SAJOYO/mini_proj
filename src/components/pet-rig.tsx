@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { Circle, Ellipse, G, Path, Svg } from 'react-native-svg';
+import { Circle, Ellipse, G, Path, Rect, Svg } from 'react-native-svg';
 
 import {
   NEUTRAL_STAGE,
@@ -303,9 +303,21 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
 
   // 발은 아기·청소년일수록 유난히 큽니다. 바닥선(≈199)을 유지하도록
   // 커진 만큼 중심을 위로 올려, 발이 뷰박스 밖으로 삐져나가지 않게 합니다.
-  const pawRx = 16 * stage.pawScale;
-  const pawRy = 11 * stage.pawScale;
+  const pawRx = 12 * stage.pawScale;
+  const pawRy = 10 * stage.pawScale;
   const pawCy = 199 - pawRy;
+  // 두 발 간격. 발이 커지면 같이 벌려야 서로 겹치지 않습니다.
+  // (아기는 발이 1.5배라 간격이 고정이면 두 발이 포개집니다.)
+  const pawGap = pawRx + 3;
+  const legW = pawRx * 1.05;
+  const legTop = ANCHOR.body.y + 14 * bodyScale;
+
+  // 뒷다리 허벅지 — 앉은 자세에서 몸통 옆구리 아래로 불룩 나오는 덩어리.
+  // 강아지가 네 발 동물로 보이느냐는 거의 전부 이 형태에 달려 있습니다.
+  const haunchCx = bodyRx * 0.7;
+  const haunchRx = bodyRx * 0.41;
+  const haunchRy = bodyRy * 0.46;
+  const haunchCy = ANCHOR.body.y + bodyRy * 0.5;
 
   // 귀는 품종 각도에 단계 처짐을 더하고, 길이에 단계 배율을 곱합니다.
   // (아기는 품종과 무관하게 귀가 작고 쳐지고, 노년은 살짝 처집니다.)
@@ -369,28 +381,28 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
           />
         </AnimatedG>
 
-        {/* 앞발 — 아기·청소년은 발이 큼직합니다 */}
-        <Ellipse
-          cx={78}
-          cy={pawCy}
-          rx={pawRx}
-          ry={pawRy}
-          fill={pale}
-          stroke={line}
-          strokeWidth={4}
-        />
-        <Ellipse
-          cx={122}
-          cy={pawCy}
-          rx={pawRx}
-          ry={pawRy}
-          fill={pale}
-          stroke={line}
-          strokeWidth={4}
-        />
-
         {/* 몸통 */}
         <AnimatedG animatedProps={bodyProps}>
+          {/* 뒷다리 허벅지 — 몸통보다 먼저 그려서 옆구리 밖으로 살짝만 내밉니다.
+              몸통 위에 얹으면 붙여 놓은 혹처럼 보입니다. */}
+          <Ellipse
+            cx={ANCHOR.body.x - haunchCx}
+            cy={haunchCy}
+            rx={haunchRx}
+            ry={haunchRy}
+            fill={fur}
+            stroke={line}
+            strokeWidth={5}
+          />
+          <Ellipse
+            cx={ANCHOR.body.x + haunchCx}
+            cy={haunchCy}
+            rx={haunchRx}
+            ry={haunchRy}
+            fill={fur}
+            stroke={line}
+            strokeWidth={5}
+          />
           <Blob
             cx={ANCHOR.body.x}
             cy={ANCHOR.body.y}
@@ -416,6 +428,32 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
           />
           <BodyPattern pattern={preset.furPattern} tone={patch} bodyRx={bodyRx} />
         </AnimatedG>
+
+        {/* 앞다리 — 앉은 자세라 가슴 '앞'에서 곧게 내려옵니다. 그래서 몸통보다 뒤에
+            그리면 안 됩니다. 발만 몸통 밑에 붙여 두면 두 발로 선 것처럼 보입니다. */}
+        {[ANCHOR.body.x - pawGap, ANCHOR.body.x + pawGap].map((cx) => (
+          <G key={cx}>
+            <Rect
+              x={cx - legW / 2}
+              y={legTop}
+              width={legW}
+              height={Math.max(0, pawCy - legTop)}
+              rx={legW / 2}
+              fill={fur}
+              stroke={line}
+              strokeWidth={4}
+            />
+            <Ellipse
+              cx={cx}
+              cy={pawCy}
+              rx={pawRx}
+              ry={pawRy}
+              fill={pale}
+              stroke={line}
+              strokeWidth={4}
+            />
+          </G>
+        ))}
 
         {/* 머리 — 목을 축으로 갸웃합니다. 귀·눈·코가 전부 이 안에 있습니다. */}
         <AnimatedG animatedProps={headProps}>
