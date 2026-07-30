@@ -223,6 +223,16 @@ export type Pet = {
    * "함께한 일수"를 부풀립니다. 저장된 데이터를 망치지 않는 게 목적입니다.
    */
   timeWarpMs: number;
+  /**
+   * 확정된 엔딩. 노년기에 들어서는 순간 한 번 계산해서 여기 적고, 그 뒤로는
+   * 바뀌지 않습니다. 아직 노년기가 아니면 null.
+   *
+   * **엔딩을 매번 다시 계산하면 안 됩니다.** 노년기 이후에도 스탯에 따라 카드가
+   * 계속 바뀌면 "엔딩"이 아니라 실시간 상태 표시로 읽힙니다.
+   */
+  ending: EndingId | null;
+  /** 엔딩이 확정된 시각(ISO 8601). 아직이면 null. */
+  endedAt: string | null;
 };
 
 export function createPet(breed: string, photoUri: string | null, now: number = Date.now()): Pet {
@@ -235,6 +245,8 @@ export function createPet(breed: string, photoUri: string | null, now: number = 
     stats: { ...GameConfig.initialStats },
     lastTickAt: now,
     timeWarpMs: 0,
+    ending: null,
+    endedAt: null,
   };
 }
 
@@ -303,13 +315,29 @@ export function progressToNext(
   };
 }
 
+/** 노년기에 들어섰으면 돌봄 단계가 끝난 것으로 봅니다(스탯 정지, 돌봄 버튼 없음). */
+export function isCareOpen(pet: Pet, now: number = Date.now()): boolean {
+  return stageOf(pet, now).id !== 'elder';
+}
+
 /**
  * 마지막 계산 시각부터 지금까지 흐른 시간만큼 스탯을 깎습니다.
  * 앱을 껐다 켰을 때 그 사이의 방치가 반영되도록 하는 함수입니다.
+ *
+ * 노년기에 들어선 뒤로는 깎지 않습니다 — 엔딩이 확정된 다음이라 스탯이 더 움직일
+ * 이유가 없고, 움직이면 엔딩 카드가 계속 바뀌는 것처럼 보입니다.
+ *
+ * 단, "노년기였는지"는 **흐른 구간이 시작될 때(lastTickAt)** 기준으로 판정합니다.
+ * 지금 기준으로 판정하면, 청년기에 며칠 방치해서 노년기에 진입한 경우 그 방치가
+ * 통째로 면제되어 엔딩이 부당하게 좋게 나옵니다.
  */
 export function applyDecay(pet: Pet, now: number = Date.now()): Pet {
   const hours = (now - pet.lastTickAt) / MS_PER_HOUR;
   if (hours <= 0) return pet;
+
+  if (stageOf(pet, pet.lastTickAt).id === 'elder') {
+    return { ...pet, lastTickAt: now };
+  }
 
   const stats = { ...pet.stats };
   for (const { id } of STATS) {
@@ -318,6 +346,14 @@ export function applyDecay(pet: Pet, now: number = Date.now()): Pet {
   }
 
   return { ...pet, stats, lastTickAt: now };
+}
+
+/**
+ * 시간 경과를 한 번에 반영합니다: 스탯 감소 → 노년기면 엔딩 확정.
+ * 저장 전에는 항상 이 함수를 거치세요(순서를 틀리면 엔딩 점수가 어긋납니다).
+ */
+export function advance(pet: Pet, now: number = Date.now()): Pet {
+  return sealEnding(applyDecay(pet, now), now);
 }
 
 export type CareResult = {
@@ -335,8 +371,18 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
   const action = CARE_ACTIONS.find((a) => a.id === actionId);
   if (!action) throw new Error(`알 수 없는 돌봄 액션: ${actionId}`);
 
-  const decayed = applyDecay(pet, now);
+  const decayed = advance(pet, now);
   const before = stageOf(decayed, now);
+
+  // 노년기에는 돌봄이 끝났습니다(화면에서도 버튼이 사라지지만, 규칙으로도 막아둡니다).
+  if (before.id === 'elder') {
+    return {
+      pet: decayed,
+      applied: false,
+      message: '이제는 곁에 있어주기만 해도 돼요',
+      grewInto: null,
+    };
+  }
 
   if (decayed.stats[action.stat] >= GameConfig.fullThreshold) {
     return { pet: decayed, applied: false, message: action.refusal, grewInto: null };
@@ -355,7 +401,8 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
   const after = stageOf(next, now);
 
   return {
-    pet: next,
+    // 이 돌봄으로 청년기를 넘어섰을 수도 있으니 엔딩 확정을 한 번 더 거칩니다.
+    pet: sealEnding(next, now),
     applied: true,
     message: action.reaction,
     grewInto: after.id === before.id ? null : after,
@@ -387,34 +434,60 @@ export function endingScore(pet: Pet): number {
   return Math.round(statAvg * 0.7 + careRatio * 0.3);
 }
 
-/** 노년기에 도달한 캐릭터의 엔딩. 노년기가 아니면 null. */
-export function endingOf(pet: Pet, now: number = Date.now()): Ending | null {
-  if (stageOf(pet, now).id !== 'elder') return null;
-
-  const score = endingScore(pet);
-
-  if (score >= GameConfig.endingGoodAbove) {
-    return {
-      id: 'happy',
-      label: '행복한 노년',
-      emoji: '🌷',
-      message: '평생 사랑받은 얼굴이에요. 고마웠다고 말하고 있어요.',
-    };
-  }
-  if (score >= GameConfig.endingNormalAbove) {
-    return {
-      id: 'normal',
-      label: '평범한 노년',
-      emoji: '🍂',
-      message: '무탈하게 나이 들었어요. 조금 더 놀아주면 좋았을 텐데요.',
-    };
-  }
-  return {
+export const ENDINGS: Record<EndingId, Ending> = {
+  happy: {
+    id: 'happy',
+    label: '행복한 노년',
+    emoji: '🌷',
+    message: '평생 사랑받은 얼굴이에요. 고마웠다고 말하고 있어요.',
+  },
+  normal: {
+    id: 'normal',
+    label: '평범한 노년',
+    emoji: '🍂',
+    message: '무탈하게 나이 들었어요. 조금 더 놀아주면 좋았을 텐데요.',
+  },
+  lonely: {
     id: 'lonely',
     label: '쓸쓸한 노년',
     emoji: '🌫️',
     message: '혼자 있던 날이 많았어요. 그래도 당신을 기다렸어요.',
+  },
+};
+
+/** 점수를 엔딩 등급으로. */
+export function endingGrade(score: number): EndingId {
+  if (score >= GameConfig.endingGoodAbove) return 'happy';
+  if (score >= GameConfig.endingNormalAbove) return 'normal';
+  return 'lonely';
+}
+
+/**
+ * 노년기에 막 들어섰다면 엔딩을 계산해서 **한 번만** 적어둡니다.
+ * 이미 적혀 있거나 아직 노년기가 아니면 그대로 돌려줍니다.
+ *
+ * 엔딩을 pet에 저장해 두는 게 핵심입니다. 매번 다시 계산하면 노년기 이후에도
+ * 카드가 계속 바뀌어서 엔딩으로 읽히지 않습니다.
+ */
+export function sealEnding(pet: Pet, now: number = Date.now()): Pet {
+  if (pet.ending) return pet;
+  if (stageOf(pet, now).id !== 'elder') return pet;
+
+  return {
+    ...pet,
+    ending: endingGrade(endingScore(pet)),
+    endedAt: new Date(now).toISOString(),
   };
+}
+
+/**
+ * 확정된 엔딩. 노년기가 아니면 null.
+ *
+ * 점수를 다시 계산하지 않고 pet에 적힌 결과를 읽기만 합니다.
+ * 확정은 sealEnding()이 담당합니다.
+ */
+export function endingOf(pet: Pet): Ending | null {
+  return pet.ending ? ENDINGS[pet.ending] : null;
 }
 
 /* ------------------------------------------------------------------ */

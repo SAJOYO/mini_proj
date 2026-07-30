@@ -10,8 +10,8 @@ import {
 } from 'react';
 
 import {
+  advance,
   applyCare,
-  applyDecay,
   createPet,
   skipToNextStage,
   type CareActionId,
@@ -74,8 +74,8 @@ export function PetProvider({ children }: { children: ReactNode }) {
     loadPet<Pet>()
       .then((stored) => {
         if (cancelled || !stored) return;
-        // 앱을 껐던 사이에 흐른 시간만큼 스탯을 한 번에 깎아줍니다.
-        const caught = applyDecay(stored);
+        // 앱을 껐던 사이에 흐른 시간을 한 번에 반영합니다(스탯 감소 + 엔딩 확정).
+        const caught = advance(stored);
         petRef.current = caught;
         setPet(caught);
         void savePet(caught);
@@ -95,7 +95,7 @@ export function PetProvider({ children }: { children: ReactNode }) {
       const current = petRef.current;
       if (!current) return;
 
-      const next = applyDecay(current);
+      const next = advance(current);
       petRef.current = next;
       setPet(next);
       void savePet(next);
@@ -134,7 +134,8 @@ export function PetProvider({ children }: { children: ReactNode }) {
   const skipStage = useCallback(async () => {
     const current = petRef.current;
     if (!current) return;
-    await commit(skipToNextStage(current));
+    // 노년기로 건너뛴 경우 바로 엔딩이 확정되도록 advance를 거칩니다.
+    await commit(advance(skipToNextStage(current)));
   }, [commit]);
 
   const value = useMemo(

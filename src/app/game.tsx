@@ -14,6 +14,7 @@ import {
   CARE_ACTIONS,
   daysTogether,
   endingOf,
+  isCareOpen,
   progressToNext,
   STATS,
   stageOf,
@@ -114,7 +115,9 @@ export default function GameScreen() {
   const progress = progressToNext(pet);
   const ending = endingOf(pet);
   const days = daysTogether(pet);
-  const sad = STATS.some((s) => pet.stats[s.id] < SAD_BELOW);
+  const careOpen = isCareOpen(pet);
+  // 노년기에는 스탯이 멈추므로 시무룩한 표정도 쓰지 않습니다.
+  const sad = careOpen && STATS.some((s) => pet.stats[s.id] < SAD_BELOW);
 
   return (
     <Screen scroll>
@@ -165,42 +168,68 @@ export default function GameScreen() {
           </View>
         </View>
       ) : ending ? (
-        <View style={[styles.ending, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <View style={[styles.ending, { backgroundColor: c.surface, borderColor: c.primary }]}>
+          <Text style={[styles.endingTag, { color: c.primary }]}>ENDING</Text>
           <Text style={styles.endingEmoji}>{ending.emoji}</Text>
           <Text style={[styles.endingLabel, { color: c.text }]}>{ending.label}</Text>
           <Text style={[styles.endingBody, { color: c.textSecondary }]}>{ending.message}</Text>
         </View>
       ) : null}
 
-      <View style={[styles.stats, { backgroundColor: c.surface, borderColor: c.border }]}>
-        {STATS.map((s) => (
-          <StatBar
-            key={s.id}
-            label={s.label}
-            emoji={s.emoji}
-            value={pet.stats[s.id]}
-            warnBelow={s.warnBelow}
-          />
-        ))}
-      </View>
+      {careOpen ? (
+        <>
+          <View style={[styles.stats, { backgroundColor: c.surface, borderColor: c.border }]}>
+            {STATS.map((s) => (
+              <StatBar
+                key={s.id}
+                label={s.label}
+                emoji={s.emoji}
+                value={pet.stats[s.id]}
+                warnBelow={s.warnBelow}
+              />
+            ))}
+          </View>
 
-      <View style={styles.careRow}>
-        {CARE_ACTIONS.map((action) => (
-          <Pressable
-            key={action.id}
-            accessibilityRole="button"
-            accessibilityLabel={action.label}
-            onPress={() => void handleCare(action.id)}
-            style={({ pressed }) => [
-              styles.careButton,
-              { backgroundColor: c.surface, borderColor: c.border },
-              pressed && styles.carePressed,
-            ]}>
-            <Text style={styles.careEmoji}>{action.emoji}</Text>
-            <Text style={[styles.careLabel, { color: c.text }]}>{action.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+          <View style={styles.careRow}>
+            {CARE_ACTIONS.map((action) => (
+              <Pressable
+                key={action.id}
+                accessibilityRole="button"
+                accessibilityLabel={action.label}
+                onPress={() => void handleCare(action.id)}
+                style={({ pressed }) => [
+                  styles.careButton,
+                  { backgroundColor: c.surface, borderColor: c.border },
+                  pressed && styles.carePressed,
+                ]}>
+                <Text style={styles.careEmoji}>{action.emoji}</Text>
+                <Text style={[styles.careLabel, { color: c.text }]}>{action.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : (
+        // 노년기 = 돌봄 마감. 스탯 게이지와 돌봄 버튼 대신 함께한 기록을 보여줍니다.
+        // (게이지가 계속 움직이면 엔딩이 확정된 결과로 읽히지 않습니다)
+        <View style={[styles.record, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.recordTitle, { color: c.text }]}>함께한 기록</Text>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>함께한 날</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{days + 1}일</Text>
+          </View>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>돌봐준 횟수</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{pet.careCount}번</Text>
+          </View>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>쌓은 경험치</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{pet.exp} EXP</Text>
+          </View>
+          <Text style={[styles.recordNote, { color: c.textSecondary }]}>
+            돌봄은 여기서 끝나요. 엔딩은 더 이상 바뀌지 않습니다.
+          </Text>
+        </View>
+      )}
 
       {/*
         TODO(장유빈·임승현): 대화하기 화면으로 넘어가는 자리입니다.
@@ -309,13 +338,48 @@ const styles = StyleSheet.create({
   },
   ending: {
     marginTop: Spacing.lg,
-    borderWidth: 1,
+    borderWidth: 2,
     borderRadius: Radius.lg,
     padding: Spacing.md,
     alignItems: 'center',
   },
+  endingTag: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: Spacing.xs,
+  },
   endingEmoji: {
     fontSize: 28,
+  },
+  record: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  recordTitle: {
+    fontSize: FontSize.label,
+    fontWeight: '800',
+    marginBottom: Spacing.xs,
+  },
+  recordRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  recordLabel: {
+    fontSize: FontSize.caption,
+  },
+  recordValue: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  recordNote: {
+    fontSize: FontSize.caption,
+    marginTop: Spacing.xs,
   },
   endingLabel: {
     fontSize: FontSize.label,
