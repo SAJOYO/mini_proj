@@ -68,54 +68,33 @@ type AxisDef = {
  * 아래 파생 로직은 전부 이 객체를 순회하기 때문에, 축이 늘어도 코드는 안 늘어납니다.
  */
 export const AXES = {
-  sociability: {
-    label: '사교성',
-    description: '낯선 존재와 새로운 상황에 열려 있는가, 경계하는가',
+  attachment: {
+    label: '애착',
+    description: '사람 곁에 있고 싶어하는가, 혼자가 편한가',
     default: 50,
     cuts: [20, 40, 60, 80],
-    traits: ['심한 낯가림', '낯가림', '무난함', '붙임성 좋음', '마당발'],
+    traits: ['혼자가 편함', '거리를 둠', '적당함', '곁에 있고 싶어함', '껌딱지'],
   },
-  affection: {
-    label: '애정표현',
-    description: '좋아하는 마음을 겉으로 드러내는가, 안으로 삼키는가',
+  expression: {
+    label: '표현',
+    description: '그 마음을 겉으로 내는가, 안으로 삼키는가',
     default: 50,
     cuts: [20, 40, 60, 80],
-    traits: ['무뚝뚝', '데면데면', '은근함', '다정함', '애교쟁이'],
-  },
-  independence: {
-    label: '독립성',
-    description: '혼자 있는 시간을 편해하는가, 곁에 붙어 있고 싶어하는가',
-    default: 50,
-    cuts: [20, 40, 60, 80],
-    traits: ['껌딱지', '의존적', '적당함', '독립적', '혼자가 편함'],
-  },
-  pride: {
-    label: '자존심',
-    description: '체면을 차리는가, 털털한가',
-    default: 50,
-    cuts: [20, 40, 60, 80],
-    traits: ['순둥이', '털털함', '보통', '자존심 셈', '도도함'],
+    traits: ['속을 감춤', '무뚝뚝', '보통', '솔직함', '전부 티 냄'],
   },
   sensitivity: {
     label: '예민함',
     description: '작은 자극에 크게 반응하는가, 웬만해선 꿈쩍 않는가',
     default: 50,
     cuts: [20, 40, 60, 80],
-    traits: ['무신경', '둔감', '보통', '예민', '신경질적'],
-  },
-  persistence: {
-    label: '감정지속',
-    description: '한번 든 감정이 오래 가는가, 금방 잊는가',
-    default: 50,
-    cuts: [20, 40, 60, 80],
-    traits: ['뒤끝없음', '금방 잊음', '보통', '잠깐 삐짐', '장기기억'],
+    traits: ['강심장', '무던함', '보통', '섬세함', '예민함'],
   },
   curiosity: {
     label: '호기심',
     description: '새로운 것에 끌리는가, 익숙한 것을 선호하는가',
     default: 50,
     cuts: [20, 40, 60, 80],
-    traits: ['겁 많음', '신중함', '보통', '호기심 많음', '모험가'],
+    traits: ['겁 많음', '신중함', '보통', '호기심 많음', '겁 없음'],
   },
   optimism: {
     label: '낙천성',
@@ -141,96 +120,49 @@ export const AXIS_KEYS = Object.keys(AXES) as AxisKey[];
 /**
  * 품종마다의 성격 기본값.
  *
- * `Partial`인 게 중요합니다. 축을 새로 추가해도 여기 8줄이 컴파일 에러를 내지 않고,
+ * `Partial`인 게 중요합니다. 축을 새로 추가해도 여기 여덟 줄이 컴파일 에러를 내지 않고,
  * 값을 안 적은 축은 `AXES`의 `default`로 조용히 돌아갑니다.
  * (전부 필수로 잡으면 축 하나 늘릴 때마다 아홉 군데를 고쳐야 해서, 결국 안 고치게 됩니다.)
  *
- * 값은 견종의 일반적인 기질을 참고한 초안입니다. 마음껏 조정하세요.
+ * ── 값을 고칠 때 조심할 것 ─────────────────────────────────
+ * 축을 여러 개 두는 이유는 서로 다른 걸 재기 위해서입니다. 그런데 "친근한 개"를
+ * 떠올리며 값을 채우면 여러 축이 한 덩어리로 움직여서, 축은 여러 개인데 실제로는
+ * 하나인 상태가 됩니다. 예전 프리셋이 그랬습니다(애정표현과 독립성이 r = -0.92).
+ *
+ * 특히 애착과 표현은 **일부러 어긋나게** 배치했습니다. 둘이 붙어 있으면
+ * "곁에 있고 싶은데 티는 안 내는" 캐릭터가 아예 나올 수 없습니다.
+ *
+ *               표현 낮음        표현 높음
+ *   애착 높음   닥스훈트         리트리버 · 말티즈
+ *   애착 낮음   시바             비글
+ *
+ * 값을 조정할 땐 네 칸이 계속 차 있는지 확인하세요.
  */
 const BREED_AXES: Record<BreedId, Partial<Axes>> = {
   // 모든 품종의 원점. 전부 기본값(50)으로 둡니다.
   neutral: {},
 
-  shiba: {
-    sociability: 25,
-    affection: 25,
-    independence: 90,
-    pride: 92,
-    sensitivity: 55,
-    persistence: 70,
-    curiosity: 55,
-    optimism: 45,
-  },
-  retriever: {
-    sociability: 92,
-    affection: 92,
-    independence: 20,
-    pride: 20,
-    sensitivity: 30,
-    persistence: 8,
-    curiosity: 78,
-    optimism: 95,
-  },
-  dachshund: {
-    sociability: 45,
-    affection: 60,
-    independence: 65,
-    pride: 70,
-    sensitivity: 65,
-    persistence: 65,
-    curiosity: 85,
-    optimism: 55,
-  },
-  poodle: {
-    sociability: 70,
-    affection: 72,
-    independence: 45,
-    pride: 68,
-    sensitivity: 80,
-    persistence: 45,
-    curiosity: 88,
-    optimism: 65,
-  },
-  beagle: {
-    sociability: 95,
-    affection: 85,
-    independence: 40,
-    pride: 18,
-    sensitivity: 25,
-    persistence: 5,
-    curiosity: 95,
-    optimism: 90,
-  },
-  shihtzu: {
-    sociability: 72,
-    affection: 78,
-    independence: 30,
-    pride: 45,
-    sensitivity: 40,
-    persistence: 25,
-    curiosity: 40,
-    optimism: 78,
-  },
-  maltese: {
-    sociability: 40,
-    affection: 88,
-    independence: 12,
-    pride: 55,
-    sensitivity: 88,
-    persistence: 55,
-    curiosity: 45,
-    optimism: 60,
-  },
-  corgi: {
-    sociability: 80,
-    affection: 75,
-    independence: 55,
-    pride: 60,
-    sensitivity: 35,
-    persistence: 30,
-    curiosity: 82,
-    optimism: 85,
-  },
+  // 애착 낮음 · 표현 낮음 — 무심한 독립러
+  shiba: { attachment: 15, expression: 20, sensitivity: 50, curiosity: 60, optimism: 55 },
+
+  // 애착 높음 · 표현 높음 — 껌딱지 애교쟁이
+  retriever: { attachment: 88, expression: 92, sensitivity: 25, curiosity: 70, optimism: 95 },
+
+  // 애착 높음 · 표현 낮음 — 츤데레. 주인에게 집착하면서도 고집이 세고 티를 안 냅니다
+  dachshund: { attachment: 72, expression: 30, sensitivity: 70, curiosity: 88, optimism: 68 },
+
+  // 예민한데 밝습니다. 예민함과 낙천성이 한 덩어리로 묶이지 않게 하는 축입니다
+  poodle: { attachment: 62, expression: 65, sensitivity: 85, curiosity: 82, optimism: 82 },
+
+  // 애착 낮음 · 표현 높음 — 사람은 좋아하는데 냄새 따라 가버립니다
+  beagle: { attachment: 35, expression: 90, sensitivity: 20, curiosity: 95, optimism: 88 },
+
+  shihtzu: { attachment: 80, expression: 58, sensitivity: 45, curiosity: 30, optimism: 80 },
+
+  // 붙고 표현도 하는데 예민하고 잘 시무룩해집니다
+  maltese: { attachment: 95, expression: 85, sensitivity: 92, curiosity: 40, optimism: 40 },
+
+  corgi: { attachment: 55, expression: 78, sensitivity: 35, curiosity: 88, optimism: 82 },
 };
 
 /** 프리셋에 빠진 축을 기본값으로 채워서 완전한 축 묶음을 만듭니다. */
@@ -366,40 +298,31 @@ export function traitOf(key: AxisKey, value: number): string {
  * 축의 양 끝에 붙는 이름.
  *
  * 고정된 축 쌍으로 조합표를 만들면 두 가지가 문제였습니다.
- * 축 여덟 개 중 넷만 쓰이고, 구간이 늘어나면 표가 `5×5`로 불어납니다.
+ * 짝지어진 축만 쓰이고 나머지는 놀며, 구간이 늘어나면 표가 `5×5`로 불어납니다.
  *
  * 그래서 표를 버리고, 그 캐릭터에서 **가장 튀는 축 두 개**를 그때그때 뽑습니다.
  * 축이 몇 개든 구간이 몇 개든 여기 목록만 있으면 되고, 안 쓰이는 축도 없습니다.
+ *
+ * 이 태그는 결과 화면에도 뜨고 대사 프롬프트에도 들어갑니다. 모델이 이걸 앵커
+ * 삼아 연기하기 때문에, 어휘가 곧 연기 톤이 됩니다. 놀리는 말은 쓰지 마세요.
  */
 type AxisName = { readonly adj: string; readonly noun: string };
 
 const NAMES: Record<AxisKey, { low: AxisName; high: AxisName }> = {
-  sociability: {
-    low: { adj: '낯가리는', noun: '경계병' },
-    high: { adj: '붙임성 좋은', noun: '마당발' },
+  attachment: {
+    low: { adj: '혼자 있는', noun: '독립러' },
+    high: { adj: '들러붙는', noun: '껌딱지' },
   },
-  affection: {
-    low: { adj: '무뚝뚝한', noun: '무심이' },
-    high: { adj: '다정한', noun: '애교쟁이' },
-  },
-  independence: {
-    low: { adj: '들러붙는', noun: '껌딱지' },
-    high: { adj: '혼자 있는', noun: '독립러' },
-  },
-  pride: {
-    low: { adj: '털털한', noun: '순둥이' },
-    high: { adj: '도도한', noun: '까칠이' },
+  expression: {
+    low: { adj: '무뚝뚝한', noun: '새침이' },
+    high: { adj: '솔직한', noun: '애교쟁이' },
   },
   sensitivity: {
     low: { adj: '무던한', noun: '강심장' },
-    high: { adj: '예민한', noun: '유리멘탈' },
-  },
-  persistence: {
-    low: { adj: '금방 잊는', noun: '건망증' },
-    high: { adj: '뒤끝 있는', noun: '기억왕' },
+    high: { adj: '섬세한', noun: '눈치백단' },
   },
   curiosity: {
-    low: { adj: '신중한', noun: '겁쟁이' },
+    low: { adj: '조심스러운', noun: '신중파' },
     high: { adj: '호기심 많은', noun: '탐험가' },
   },
   optimism: {
@@ -434,6 +357,99 @@ function archetypeOf(axes: Axes, bands: Record<AxisKey, Band>): string {
 }
 
 /* ------------------------------------------------------------------ *
+ * 서술 — 성격을 한 문단으로
+ * ------------------------------------------------------------------ */
+
+/**
+ * 구간마다의 서술 조각.
+ *
+ * 태그(`archetype`)가 한 단어 요약이라면, 이건 성격의 실체입니다.
+ * 대사 담당이 프롬프트에 그대로 넣을 수 있게 완성된 문장으로 씁니다.
+ *
+ * `mid`가 `null`인 게 핵심입니다. 다섯 축을 전부 채우면
+ * "적당하고, 보통이고, 적당히" 범벅이 됩니다. 특징 없는 축은 할 말이 없습니다.
+ * 튀는 축만 문장에 남고, 캐릭터가 뚜렷할수록 문단이 길어집니다.
+ *
+ * 어디까지나 **성격 서술**입니다. "먼저 말을 걸지 않는다" 같은 말투 지시는
+ * 여기 쓰지 마세요 — 그건 대사 담당이 정합니다. 파일 맨 위 설명을 보세요.
+ */
+const CLAUSES: Record<AxisKey, Record<Band, string | null>> = {
+  attachment: {
+    very_low: '사람 곁에 굳이 있으려 하지 않는다',
+    low: '적당히 거리를 두는 편이다',
+    mid: null,
+    high: '곁에 있고 싶어한다',
+    very_high: '한시도 떨어지기 싫어한다',
+  },
+  expression: {
+    very_low: '속마음을 거의 드러내지 않는다',
+    low: '마음을 잘 드러내지 않는다',
+    mid: null,
+    high: '마음을 곧잘 드러낸다',
+    very_high: '느끼는 걸 전부 티 낸다',
+  },
+  sensitivity: {
+    very_low: '웬만한 일에는 꿈쩍도 하지 않는다',
+    low: '어지간한 건 그냥 넘긴다',
+    mid: null,
+    high: '작은 변화도 금방 알아챈다',
+    very_high: '사소한 것에도 크게 반응한다',
+  },
+  curiosity: {
+    very_low: '낯선 것은 피한다',
+    low: '익숙한 쪽을 좋아한다',
+    mid: null,
+    high: '새로운 것에 먼저 다가간다',
+    very_high: '뭐든 일단 들이대고 본다',
+  },
+  optimism: {
+    very_low: '무슨 일이든 나쁜 쪽으로 생각한다',
+    low: '쉽게 시무룩해진다',
+    mid: null,
+    high: '대체로 기분이 좋다',
+    very_high: '무슨 일이 있어도 금방 밝아진다',
+  },
+};
+
+/** 튀는 축이 하나도 없을 때. */
+const FLAT_DESCRIPTION = '특별히 튀는 구석이 없는 성격이다.';
+
+/** 애착과 표현이 어긋날 때 앞에 붙일 말. 이 한 단어가 츤데레를 만듭니다. */
+const MISMATCH_MARKER = '다만 ';
+
+/**
+ * 성격을 한 문단으로 씁니다.
+ *
+ * 애착과 표현은 한 문장으로 묶습니다. 둘이 어긋날 때 "다만"을 끼워 넣는 게
+ * 이 함수의 요점입니다. 조각을 따로 나열하면 그 긴장이 안 보입니다.
+ *
+ *   애착↑ 표현↑  곁에 있고 싶어한다. 마음을 곧잘 드러낸다.
+ *   애착↑ 표현↓  곁에 있고 싶어한다. 다만 마음을 잘 드러내지 않는다.
+ */
+function describe(axes: Axes, bands: Record<AxisKey, Band>): string {
+  const clause = (key: AxisKey) => CLAUSES[key][bands[key]];
+  const sentences: string[] = [];
+
+  const attachment = clause('attachment');
+  const expression = clause('expression');
+
+  if (attachment && expression) {
+    // 한쪽은 붙고 싶은데 다른 쪽은 티를 안 내는 식이면 그 어긋남을 드러냅니다.
+    const sameWay = axes.attachment > 50 === axes.expression > 50;
+    sentences.push(attachment, (sameWay ? '' : MISMATCH_MARKER) + expression);
+  } else if (attachment ?? expression) {
+    sentences.push((attachment ?? expression) as string);
+  }
+
+  for (const key of ['sensitivity', 'curiosity', 'optimism'] as const) {
+    const rest = clause(key);
+    if (rest) sentences.push(rest);
+  }
+
+  return sentences.length === 0 ? FLAT_DESCRIPTION : `${sentences.join('. ')}.`;
+}
+
+/* ------------------------------------------------------------------ *
  * 공개 API
  * ------------------------------------------------------------------ */
 
@@ -453,13 +469,21 @@ export type PersonaCard = {
   /** 구간에서 나온 특성 이름들. 결과 화면에 그대로 뿌려도 됩니다 */
   traits: string[];
   /**
-   * 가장 튀는 축 두 개로 만든 한 줄 이름. 예: "혼자 있는 까칠이"
+   * 가장 튀는 축 두 개로 만든 한 줄 이름. 예: "혼자 있는 새침이"
    *
-   * **결과 화면 표시용입니다.** 대사 프롬프트에는 넣지 마세요.
-   * 구체적인 축 값을 두고 추상 라벨을 같이 주면, 모델이 라벨의 통념 쪽으로
-   * 과장해서 연기합니다. 대사는 `axes`와 `bands`를 보고 정하는 게 맞습니다.
+   * 결과 화면의 태그이자, 대사 프롬프트에서 모델이 잡는 연기의 앵커입니다.
+   * 축 값에서 계산되므로 `description`과 어긋날 수 없습니다.
+   * 다만 한 단어라 통념 쪽으로 과장되기 쉬우니, 프롬프트에 넣을 땐
+   * "이건 요약이고 실제 기준은 아래"라고 우선순위를 같이 적어주세요.
    */
   archetype: string;
+  /**
+   * 성격을 풀어 쓴 문단. 예: "곁에 있고 싶어한다. 다만 마음을 잘 드러내지 않는다."
+   *
+   * 튀는 축만 들어갑니다. 대사 담당이 프롬프트에 그대로 넣을 수 있는 형태이되,
+   * 말투 지시는 아닙니다 — "어떤 애인가"까지가 여기 몫입니다.
+   */
+  description: string;
 };
 
 /**
@@ -483,7 +507,14 @@ export function synthesize(rawMix: unknown): PersonaCard {
     traits.push(traitOf(key, value));
   }
 
-  return { mix, axes, bands, traits, archetype: archetypeOf(axes, bands) };
+  return {
+    mix,
+    axes,
+    bands,
+    traits,
+    archetype: archetypeOf(axes, bands),
+    description: describe(axes, bands),
+  };
 }
 
 /** 품종 하나만 아는 경우의 지름길. */
