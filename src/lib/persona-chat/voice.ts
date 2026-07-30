@@ -56,15 +56,6 @@ const VOICE: Record<AxisKey, Record<Band, string | null>> = {
   },
 };
 
-/** 말수는 표현 축이 좌우합니다. 속을 안 내는 애는 말도 짧습니다. */
-const LENGTH: Record<Band, string> = {
-  very_low: '한 마디로 끝낸다.',
-  low: '짧게 답한다. 한 문장을 넘기지 않는다.',
-  mid: '한두 문장으로 답한다.',
-  high: '한두 문장. 할 말이 있으면 덧붙인다.',
-  very_high: '두 문장. 신나면 세 문장까지.',
-};
-
 /** 튀는 축이 하나도 없을 때. */
 const NO_QUIRKS = '특별한 버릇은 없다. 평범하게 말한다.';
 
@@ -75,9 +66,4 @@ export function voiceLines(card: PersonaCard): string[] {
     return line ? [line] : [];
   });
   return lines.length > 0 ? lines : [NO_QUIRKS];
-}
-
-/** 이 캐릭터가 한 번에 얼마나 말하는지. */
-export function lengthLine(card: PersonaCard): string {
-  return LENGTH[card.bands.expression];
 }

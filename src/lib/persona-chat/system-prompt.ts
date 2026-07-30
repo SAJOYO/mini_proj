@@ -1,6 +1,6 @@
 import { dominantBreed, type PersonaCard } from '@/constants/persona';
 import { ANIMATION_NAMES, BREEDS, type AnimationName } from '@/constants/pet';
-import { lengthLine, voiceLines } from '@/lib/persona-chat/voice';
+import { voiceLines } from '@/lib/persona-chat/voice';
 
 /**
  * 캐릭터와 무관하게 항상 같은 규칙.
@@ -108,9 +108,6 @@ export function characterBlock(card: PersonaCard, name: string): string {
     '',
     '# 말버릇',
     ...voiceLines(card).map((line) => `- ${line}`),
-    '',
-    '# 말수',
-    `- ${lengthLine(card)}`,
   ].join('\n');
 }
 
