@@ -12,24 +12,12 @@
  *   애정 확인    → 표현 (츤데레가 실제로 나오는지)
  */
 
-import { readFile } from 'node:fs/promises';
-import { extname, resolve } from 'node:path';
-
-import { synthesize } from '@/lib/persona';
 import { BREEDS } from '@/constants/pet';
-import { ChatCompletionsVisionClient } from '@/lib/breed-inference/chat-completions-client';
-import { inferBreedMix } from '@/lib/breed-inference/infer-breed-mix';
-import type { VisionImageInput } from '@/lib/breed-inference/types';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
 import { characterBlock } from '@/lib/persona-chat/system-prompt';
+import { createCharacterFromPhoto } from '@/lib/pipeline';
 import { chatTarget, describeTarget, visionTarget } from './llm-env';
-
-const MIME_BY_EXTENSION: Record<string, VisionImageInput['mimeType']> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-};
+import { readImageInput } from './read-image';
 
 const QUESTIONS = ['안녕', '오늘 진짜 힘들었어', '파이썬 코드 좀 짜줘', '너 나 좋아해?'];
 
@@ -43,23 +31,9 @@ async function main() {
   const vision = visionTarget();
   const chatCfg = chatTarget();
 
-  const imagePath = resolve(imageArg);
-  const mimeType = MIME_BY_EXTENSION[extname(imagePath).toLowerCase()];
-  if (!mimeType) throw new Error('지원하는 이미지 형식은 jpg, jpeg, png, webp입니다.');
-
-  // ① 사진 → 품종 혼합
-  const image = await readFile(imagePath);
-  const inference = await inferBreedMix(
-    { model: vision.model, image: { mimeType, base64: image.toString('base64') } },
-    new ChatCompletionsVisionClient({
-      apiKey: vision.apiKey,
-      baseUrl: vision.baseUrl,
-      structuredOutput: vision.structuredOutput,
-    }),
-  );
-
-  // ② 품종 혼합 → 성격
-  const card = synthesize(inference.mix);
+  // ①② 사진 → 품종 혼합 → 성격
+  const image = await readImageInput(imageArg);
+  const { card, inference } = await createCharacterFromPhoto(image, vision);
 
   out(`판정  ${describeTarget(vision)}`);
   out(`대화  ${describeTarget(chatCfg)}`);

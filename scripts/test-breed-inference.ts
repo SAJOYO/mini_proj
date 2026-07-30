@@ -1,20 +1,14 @@
 /// <reference types="node" />
 
-import { readFile } from 'node:fs/promises';
-import { extname, resolve } from 'node:path';
+/**
+ * 사진 한 장을 판정해서 품종 혼합과 성격을 JSON 으로 찍는 스크립트.
+ *
+ *   npm run persona:infer -- <사진 경로>
+ */
 
-import { synthesize } from '@/lib/persona';
-import { inferBreedMix } from '@/lib/breed-inference/infer-breed-mix';
-import { ChatCompletionsVisionClient } from '@/lib/breed-inference/chat-completions-client';
-import type { VisionImageInput } from '@/lib/breed-inference/types';
+import { createCharacterFromPhoto } from '@/lib/pipeline';
 import { describeTarget, visionTarget } from './llm-env';
-
-const MIME_BY_EXTENSION: Record<string, VisionImageInput['mimeType']> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-};
+import { readImageInput } from './read-image';
 
 async function main() {
   const imageArg = process.argv[2];
@@ -22,40 +16,23 @@ async function main() {
     throw new Error('사용법: npm run persona:infer -- <사진 경로>');
   }
 
-  const { apiKey, baseUrl, model, structuredOutput } = visionTarget();
-  const imagePath = resolve(imageArg);
-  const mimeType = MIME_BY_EXTENSION[extname(imagePath).toLowerCase()];
-  if (!mimeType) {
-    throw new Error('지원하는 이미지 형식은 jpg, jpeg, png, webp입니다.');
-  }
+  const vision = visionTarget();
+  process.stderr.write(`판정: ${describeTarget(vision)}\n`);
 
-  const image = await readFile(imagePath);
-  const client = new ChatCompletionsVisionClient({ apiKey, baseUrl, structuredOutput });
-  process.stderr.write(`판정: ${describeTarget(visionTarget())}
-`);
-  const result = await inferBreedMix(
-    {
-      model,
-      image: {
-        mimeType,
-        base64: image.toString('base64'),
-      },
-    },
-    client,
-  );
-  const persona = synthesize(result.mix);
+  const image = await readImageInput(imageArg);
+  const { card, inference } = await createCharacterFromPhoto(image, vision);
 
   process.stdout.write(
     `${JSON.stringify(
       {
-        elapsedMs: result.elapsedMs,
-        attempts: result.attempts,
-        mix: result.mix,
+        elapsedMs: inference.elapsedMs,
+        attempts: inference.attempts,
+        mix: inference.mix,
         persona: {
-          archetype: persona.archetype,
-          description: persona.description,
-          axes: persona.axes,
-          bands: persona.bands,
+          archetype: card.archetype,
+          description: card.description,
+          axes: card.axes,
+          bands: card.bands,
         },
       },
       null,
