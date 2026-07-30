@@ -122,11 +122,12 @@ export default function PhotoScreen() {
         {photoUri ? (
           <>
             {/*
-              TODO(홍가연): 여기서 닮은 동물 찾기 화면으로 넘어갑니다.
-              photoUri를 넘겨서 분석 결과를 받아오면 됩니다.
+              TODO(홍가연): 여기와 게임 화면 사이에 "닮은 동물 찾기 결과" 화면이 들어갑니다.
+              photoUri를 넘겨서 품종 판정 + 캐릭터 이미지를 받아오면 됩니다.
                 router.push({ pathname: '/result', params: { photoUri } })
+              그게 붙기 전까지는 흐름을 끝까지 확인할 수 있게 곧바로 게임으로 보냅니다.
             */}
-            <Button label="분석하기 (준비 중)" onPress={() => {}} disabled />
+            <Button label="분석하고 시작하기" onPress={() => router.replace('/game')} />
             <Button label="다시 고르기" variant="secondary" onPress={removePhoto} disabled={busy} />
           </>
         ) : (

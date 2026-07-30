@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const Keys = {
   user: '@pet/user',
   photoUri: '@pet/photoUri',
+  swipeHintSeen: '@pet/swipeHintSeen',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -45,7 +46,9 @@ export async function saveUser(user: User): Promise<void> {
 }
 
 export async function clearUser(): Promise<void> {
-  await AsyncStorage.multiRemove([Keys.user, Keys.photoUri]);
+  // 로그아웃하면 스와이프 힌트도 초기화합니다.
+  // (다시 로그인하면 처음 쓰는 것과 같은 흐름이 되도록. 테스트할 때도 편합니다.)
+  await AsyncStorage.multiRemove([Keys.user, Keys.photoUri, Keys.swipeHintSeen]);
 }
 
 /** 사용자가 고른 사진의 로컬 URI. 아직 안 골랐으면 null. */
@@ -59,4 +62,18 @@ export async function savePhotoUri(uri: string): Promise<void> {
 
 export async function clearPhotoUri(): Promise<void> {
   await AsyncStorage.removeItem(Keys.photoUri);
+}
+
+/**
+ * 스와이프 힌트를 이미 봤는지 여부.
+ *
+ * 게임/대화 화면은 탭바가 없어서 "옆으로 밀면 된다"는 걸 한 번은 알려줘야 합니다.
+ * 매번 띄우면 방해되니 처음 한 번만 보여주고 이 플래그를 세웁니다.
+ */
+export async function loadSwipeHintSeen(): Promise<boolean> {
+  return (await AsyncStorage.getItem(Keys.swipeHintSeen)) === '1';
+}
+
+export async function markSwipeHintSeen(): Promise<void> {
+  await AsyncStorage.setItem(Keys.swipeHintSeen, '1');
 }

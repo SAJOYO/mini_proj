@@ -117,6 +117,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
     fontSize: FontSize.label,
+    // Screen이 userSelect: 'none'을 걸어두므로 입력창에서만 다시 켭니다.
+    // (안 켜면 웹에서 입력한 글자를 드래그로 선택할 수 없습니다.)
+    userSelect: 'text',
   },
   helper: {
     fontSize: FontSize.caption,
