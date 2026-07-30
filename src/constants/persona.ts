@@ -28,21 +28,15 @@ import { BREEDS, type BreedId } from '@/constants/pet';
  * ------------------------------------------------------------------ */
 
 /**
- * 여러 품종이 섞였을 때 그 축의 값을 어떻게 합칠지.
+ * 축 값이 놓인 구간.
  *
- * 전부 `avg`로 두면 섞을수록 결과가 50 근처로 몰려서,
- * 정작 혼합이 목적인데 혼합할수록 개성이 사라집니다.
- * 축의 성질에 맞게 골라야 합니다.
- *
- *   avg       비율대로 가중평균. 대부분의 축은 이걸로 충분합니다.
- *   max       가장 높은 쪽을 그대로 가져옵니다. 섞여도 희석되지 않는 성질에 씁니다.
- *   min       가장 낮은 쪽을 그대로 가져옵니다.
- *   dominant  1순위 품종 값을 그대로 씁니다. 중간값이 어색한 축에 씁니다.
+ * 3단계로는 성격이 안 갈립니다. 자존심 70과 92가 같은 칸에 들어가면
+ * 대사 담당이 둘을 구별할 방법이 없습니다.
  */
-type BlendMode = 'avg' | 'max' | 'min' | 'dominant';
+export type Band = 'very_low' | 'low' | 'mid' | 'high' | 'very_high';
 
-/** 축 값이 놓인 구간. */
-export type Band = 'low' | 'mid' | 'high';
+/** 낮은 쪽부터 순서대로. 구간 판정과 특성 조회가 이 순서를 씁니다. */
+export const BANDS: readonly Band[] = ['very_low', 'low', 'mid', 'high', 'very_high'];
 
 type AxisDef = {
   /** 디버그·결과 화면에 보여줄 한글 이름 */
@@ -51,15 +45,14 @@ type AxisDef = {
   readonly description: string;
   /** 프리셋에 값이 없는 품종이 쓸 기본값 */
   readonly default: number;
-  readonly blend: BlendMode;
   /**
-   * 구간 경계 `[low 상한, mid 상한]`.
-   * `[33, 66]`이면 0~33 = low, 34~66 = mid, 67~100 = high.
+   * 구간 경계 `[very_low 상한, low 상한, mid 상한, high 상한]`.
+   * `[20, 40, 60, 80]`이면 0~20 / 21~40 / 41~60 / 61~80 / 81~100.
    * 특정 축만 판정을 빡빡하게 하고 싶으면 이 숫자만 조정하세요.
    */
-  readonly cuts: readonly [number, number];
-  /** 구간별 특성 이름 `[low, mid, high]` */
-  readonly traits: readonly [string, string, string];
+  readonly cuts: readonly [number, number, number, number];
+  /** 구간별 특성 이름. `BANDS`와 같은 순서 (낮은 쪽부터) */
+  readonly traits: readonly [string, string, string, string, string];
 };
 
 /**
@@ -70,8 +63,7 @@ type AxisDef = {
  *       기존 품종들은 `default` 값으로 돌아가고, 아무것도 깨지지 않습니다.
  *       나중에 품종별로 하나씩 채워 넣으면 됩니다.
  * 삭제: 항목을 지우면 타입스크립트가 그 축을 참조하던 곳을 전부 짚어줍니다.
- * 조정: `cuts`(판정 경계) · `traits`(특성 이름) · `blend`(합치는 방식)는
- *       각각 한 줄만 고치면 끝입니다.
+ * 조정: `cuts`(판정 경계) · `traits`(특성 이름)는 각각 한 줄만 고치면 끝입니다.
  *
  * 아래 파생 로직은 전부 이 객체를 순회하기 때문에, 축이 늘어도 코드는 안 늘어납니다.
  */
@@ -80,68 +72,57 @@ export const AXES = {
     label: '사교성',
     description: '낯선 존재와 새로운 상황에 열려 있는가, 경계하는가',
     default: 50,
-    blend: 'avg',
-    cuts: [33, 66],
-    traits: ['낯가림', '무난함', '개방적'],
+    cuts: [20, 40, 60, 80],
+    traits: ['심한 낯가림', '낯가림', '무난함', '붙임성 좋음', '마당발'],
   },
   affection: {
     label: '애정표현',
     description: '좋아하는 마음을 겉으로 드러내는가, 안으로 삼키는가',
     default: 50,
-    blend: 'avg',
-    cuts: [33, 66],
-    traits: ['무뚝뚝', '은근함', '애교쟁이'],
+    cuts: [20, 40, 60, 80],
+    traits: ['무뚝뚝', '데면데면', '은근함', '다정함', '애교쟁이'],
   },
   independence: {
     label: '독립성',
     description: '혼자 있는 시간을 편해하는가, 곁에 붙어 있고 싶어하는가',
     default: 50,
-    blend: 'avg',
-    cuts: [33, 66],
-    traits: ['껌딱지', '적당함', '혼자가 편함'],
+    cuts: [20, 40, 60, 80],
+    traits: ['껌딱지', '의존적', '적당함', '독립적', '혼자가 편함'],
   },
   pride: {
     label: '자존심',
     description: '체면을 차리는가, 털털한가',
     default: 50,
-    // 자존심은 섞인다고 깎이지 않습니다. 한쪽이 도도하면 그 성질이 남습니다.
-    blend: 'max',
-    cuts: [33, 66],
-    traits: ['털털함', '보통', '도도함'],
+    cuts: [20, 40, 60, 80],
+    traits: ['순둥이', '털털함', '보통', '자존심 셈', '도도함'],
   },
   sensitivity: {
     label: '예민함',
     description: '작은 자극에 크게 반응하는가, 웬만해선 꿈쩍 않는가',
     default: 50,
-    // 예민함도 희석되지 않습니다. 예민한 구석이 하나라도 있으면 그게 드러납니다.
-    blend: 'max',
-    cuts: [33, 66],
-    traits: ['둔감', '보통', '예민'],
+    cuts: [20, 40, 60, 80],
+    traits: ['무신경', '둔감', '보통', '예민', '신경질적'],
   },
   persistence: {
     label: '감정지속',
     description: '한번 든 감정이 오래 가는가, 금방 잊는가',
     default: 50,
-    // 뒤끝은 애매한 중간값이 제일 어색합니다. 1순위 품종을 따라갑니다.
-    blend: 'dominant',
-    cuts: [33, 66],
-    traits: ['뒤끝없음', '잠깐 삐짐', '장기기억'],
+    cuts: [20, 40, 60, 80],
+    traits: ['뒤끝없음', '금방 잊음', '보통', '잠깐 삐짐', '장기기억'],
   },
   curiosity: {
     label: '호기심',
     description: '새로운 것에 끌리는가, 익숙한 것을 선호하는가',
     default: 50,
-    blend: 'avg',
-    cuts: [33, 66],
-    traits: ['신중함', '보통', '모험가'],
+    cuts: [20, 40, 60, 80],
+    traits: ['겁 많음', '신중함', '보통', '호기심 많음', '모험가'],
   },
   optimism: {
     label: '낙천성',
     description: '기본 정서의 온도. 밝은 쪽인가 가라앉은 쪽인가',
     default: 50,
-    blend: 'avg',
-    cuts: [33, 66],
-    traits: ['시무룩', '담담함', '낙천'],
+    cuts: [20, 40, 60, 80],
+    traits: ['시무룩', '소심함', '담담함', '긍정적', '낙천'],
   },
 } as const satisfies Record<string, AxisDef>;
 
@@ -287,19 +268,25 @@ export const DEFAULT_MIX: BreedMix = [{ breed: 'neutral', ratio: 100 }];
 export function resolveMix(raw: unknown): BreedMix {
   if (!Array.isArray(raw)) return DEFAULT_MIX;
 
-  const valid = raw.flatMap((item): BreedMix => {
-    if (typeof item !== 'object' || item === null) return [];
+  // 같은 품종이 여러 번 오면 합칩니다. 안 합치면 지분 1위가 잘못 잡혀서
+  // 성격의 기준점 자체가 틀어집니다. (시바 30 + 시바 20 + 코기 50 → 코기가 대표)
+  const merged = new Map<BreedId, number>();
+
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
     const { breed, ratio } = item as { breed?: unknown; ratio?: unknown };
-    if (typeof breed !== 'string' || !(breed in BREEDS)) return [];
-    if (typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio <= 0) return [];
-    return [{ breed: breed as BreedId, ratio }];
-  });
+    if (typeof breed !== 'string' || !(breed in BREEDS)) continue;
+    if (typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio <= 0) continue;
 
-  if (valid.length === 0) return DEFAULT_MIX;
+    const id = breed as BreedId;
+    merged.set(id, (merged.get(id) ?? 0) + ratio);
+  }
 
-  const total = valid.reduce((sum, item) => sum + item.ratio, 0);
-  return valid
-    .map((item) => ({ breed: item.breed, ratio: (item.ratio / total) * 100 }))
+  if (merged.size === 0) return DEFAULT_MIX;
+
+  const total = [...merged.values()].reduce((sum, ratio) => sum + ratio, 0);
+  return [...merged]
+    .map(([breed, ratio]) => ({ breed, ratio: (ratio / total) * 100 }))
     .sort((a, b) => b.ratio - a.ratio);
 }
 
@@ -313,95 +300,138 @@ export function dominantBreed(mix: BreedMix): BreedId {
  * ------------------------------------------------------------------ */
 
 /**
- * 가중평균은 섞을수록 값을 중앙(50)으로 끌어당깁니다.
- * 그대로 두면 3품종 혼합이 전부 비슷한 성격이 돼버려서,
- * 평균낸 뒤 중앙에서 조금 밀어냅니다. 1이면 보정 없음.
+ * 보조 품종이 대표 품종에서 값을 끌어당길 수 있는 최대 폭.
  *
- * 단, 많이 섞였을 때만 겁니다. 단독 품종은 애초에 중앙으로 몰리지 않으니
- * 보정하면 프리셋에 적은 값과 결과가 달라져서 수치를 튜닝할 수 없게 됩니다.
- * 1순위 지분이 100이면 보정 없음, 50 이하로 내려가면 최대치가 됩니다.
+ * 지분에 비례해 줄어듭니다. 50:50이면 20, 3등분이면 26쯤,
+ * 단독 품종이면 0 — 즉 프리셋에 적은 값이 그대로 나옵니다.
+ *
+ * 이 숫자 하나가 "혼합이 성격을 얼마나 흔드는가"를 정합니다.
+ * 키우면 혼합 캐릭터가 대표 품종에서 멀어지고, 줄이면 대표 품종에 붙습니다.
  */
-const CONTRAST = 1.4;
-
-function contrastFor(dominantRatio: number): number {
-  const spread = Math.min(1, (1 - dominantRatio / 100) / 0.5);
-  return 1 + (CONTRAST - 1) * spread;
-}
+const MAX_SHIFT_AT_EVEN = 40;
 
 const clamp = (v: number) => Math.max(0, Math.min(100, Math.round(v)));
 
-/** 한 축에 대한 `{ 값, 지분 }` 목록. 지분 내림차순입니다. */
-type Weighted = { v: number; r: number }[];
-
 /**
- * 합치는 방식별 구현.
+ * 혼합 비율을 성격 축 하나로 합칩니다. `mix`는 지분 내림차순이어야 합니다.
  *
- * `Record<BlendMode, ...>`라서 모드를 새로 만들면 여기 항목을 안 채울 수가 없습니다.
+ * ── 왜 평균이 아니라 대표 품종 기준인가 ────────────────────
+ * 가중평균은 섞을수록 값을 중앙(50)으로 끌어당깁니다. 3품종을 섞으면
+ * 전부 밍밍해져서, 정작 혼합이 목적인데 혼합할수록 개성이 사라집니다.
+ *
+ * 대표 품종을 기준점으로 두면 애초에 중앙을 지나가지 않습니다.
+ * 보정이 필요한 게 아니라 보정할 일이 없어집니다.
+ *
+ * 그리고 겉모습도 대표 품종으로 그리기 때문에(`pet.ts`),
+ * "시바처럼 생겼는데 성격은 평균값" 같은 괴리가 생기지 않습니다.
+ *
+ * 축마다 합치는 방식을 달리 두던 방식(max/min/dominant)은 버렸습니다.
+ * 15%밖에 안 섞인 품종이 특정 축을 통째로 지배해서, 지분이 더는
+ * 영향력의 비율이 아니게 되기 때문입니다.
  */
-const BLEND_FNS: Record<BlendMode, (xs: Weighted) => number> = {
-  max: (xs) => Math.max(...xs.map((x) => x.v)),
-  min: (xs) => Math.min(...xs.map((x) => x.v)),
-  dominant: (xs) => xs[0].v,
-  avg: (xs) => {
-    const weighted = xs.reduce((sum, x) => sum + x.v * x.r, 0) / 100;
-    // 대비 보정은 avg에만 겁니다. max/min/dominant는 애초에 중앙으로 가지 않습니다.
-    return 50 + (weighted - 50) * contrastFor(xs[0].r);
-  },
-};
-
-/** 혼합 비율을 성격 축 하나로 합칩니다. `mix`는 지분 내림차순이어야 합니다. */
 function blendAxis(key: AxisKey, mix: BreedMix): number {
-  const values: Weighted = mix.map((item) => ({ v: axesOf(item.breed)[key], r: item.ratio }));
-  return clamp(BLEND_FNS[AXES[key].blend](values));
+  const [dominant, ...rest] = mix;
+  const base = axesOf(dominant.breed)[key];
+  if (rest.length === 0) return clamp(base);
+
+  // 보조 품종들이 각자 지분만큼 대표 품종 값에서 끌어당깁니다.
+  const pull = rest.reduce(
+    (sum, item) => sum + (item.ratio / 100) * (axesOf(item.breed)[key] - base),
+    0,
+  );
+  const maxShift = (MAX_SHIFT_AT_EVEN * (100 - dominant.ratio)) / 100;
+
+  return clamp(base + Math.max(-maxShift, Math.min(maxShift, pull)));
 }
 
-/** 축 값이 어느 구간에 놓였는지. */
+/** 축 값이 어느 구간에 놓였는지. `cuts` 길이가 바뀌어도 그대로 동작합니다. */
 export function bandOf(key: AxisKey, value: number): Band {
-  const [low, mid] = AXES[key].cuts;
-  if (value <= low) return 'low';
-  if (value <= mid) return 'mid';
-  return 'high';
+  const cuts = AXES[key].cuts;
+  for (let i = 0; i < cuts.length; i++) {
+    if (value <= cuts[i]) return BANDS[i];
+  }
+  return BANDS[cuts.length];
 }
 
 /** 축 값에 붙는 특성 이름. */
 export function traitOf(key: AxisKey, value: number): string {
-  const index = { low: 0, mid: 1, high: 2 } as const;
-  return AXES[key].traits[index[bandOf(key, value)]];
+  return AXES[key].traits[BANDS.indexOf(bandOf(key, value))];
 }
 
+/* ------------------------------------------------------------------ *
+ * 아키타입 — UI에 보여줄 한 줄 요약
+ * ------------------------------------------------------------------ */
+
 /**
- * 아키타입 조합표.
+ * 축의 양 끝에 붙는 이름.
  *
- * 성격은 축 하나씩 읽으면 형용사 나열이 될 뿐이고, 축이 만나는 지점에서 나옵니다.
- * 그래서 축 두 개를 짝지어 한 단어로 만들고, 둘을 이어 붙입니다.
+ * 고정된 축 쌍으로 조합표를 만들면 두 가지가 문제였습니다.
+ * 축 여덟 개 중 넷만 쓰이고, 구간이 늘어나면 표가 `5×5`로 불어납니다.
  *
- *   기질(sensitivity × optimism) + 관계(affection × pride)
- *   예: 예민 × 담담 → '섬세한',  애교쟁이 × 도도함 → '폭군'  ⇒  "섬세한 폭군"
- *
- * 표는 `[첫번째 축 구간][두번째 축 구간]` 순서로 읽습니다.
- * 짝을 바꾸고 싶으면 `axes`에 적힌 축 이름만 갈아 끼우면 됩니다.
+ * 그래서 표를 버리고, 그 캐릭터에서 **가장 튀는 축 두 개**를 그때그때 뽑습니다.
+ * 축이 몇 개든 구간이 몇 개든 여기 목록만 있으면 되고, 안 쓰이는 축도 없습니다.
  */
-const ARCHETYPE_RULES = [
-  {
-    axes: ['sensitivity', 'optimism'],
-    table: {
-      low: { low: '무던한', mid: '느긋한', high: '태평한' },
-      mid: { low: '조심스러운', mid: '차분한', high: '명랑한' },
-      high: { low: '여린', mid: '섬세한', high: '들뜬' },
-    },
+type AxisName = { readonly adj: string; readonly noun: string };
+
+const NAMES: Record<AxisKey, { low: AxisName; high: AxisName }> = {
+  sociability: {
+    low: { adj: '낯가리는', noun: '경계병' },
+    high: { adj: '붙임성 좋은', noun: '마당발' },
   },
-  {
-    axes: ['affection', 'pride'],
-    table: {
-      low: { low: '곰', mid: '관찰자', high: '은둔자' },
-      mid: { low: '친구', mid: '동거인', high: '츤데레' },
-      high: { low: '응석꾸러기', mid: '애교쟁이', high: '폭군' },
-    },
+  affection: {
+    low: { adj: '무뚝뚝한', noun: '무심이' },
+    high: { adj: '다정한', noun: '애교쟁이' },
   },
-] as const satisfies readonly {
-  axes: readonly [AxisKey, AxisKey];
-  table: Record<Band, Record<Band, string>>;
-}[];
+  independence: {
+    low: { adj: '들러붙는', noun: '껌딱지' },
+    high: { adj: '혼자 있는', noun: '독립러' },
+  },
+  pride: {
+    low: { adj: '털털한', noun: '순둥이' },
+    high: { adj: '도도한', noun: '까칠이' },
+  },
+  sensitivity: {
+    low: { adj: '무던한', noun: '강심장' },
+    high: { adj: '예민한', noun: '유리멘탈' },
+  },
+  persistence: {
+    low: { adj: '금방 잊는', noun: '건망증' },
+    high: { adj: '뒤끝 있는', noun: '기억왕' },
+  },
+  curiosity: {
+    low: { adj: '신중한', noun: '겁쟁이' },
+    high: { adj: '호기심 많은', noun: '탐험가' },
+  },
+  optimism: {
+    low: { adj: '시무룩한', noun: '걱정쟁이' },
+    high: { adj: '밝은', noun: '낙천가' },
+  },
+};
+
+/** 튀는 축이 하나도 없을 때. */
+const FLAT_ARCHETYPE = '평범한 동거인';
+
+/**
+ * 가장 튀는 축 두 개로 한 줄 이름을 만듭니다.
+ *
+ * 1위 축이 중심어(명사), 2위 축이 수식어(형용사)가 됩니다.
+ * `mid` 구간인 축은 애초에 후보가 아닙니다 — 특징이 없다는 뜻이니까요.
+ * 동점이면 `AXES`에 선언된 순서로 갈립니다(같은 입력이면 항상 같은 결과).
+ */
+function archetypeOf(axes: Axes, bands: Record<AxisKey, Band>): string {
+  const side = (key: AxisKey) => (axes[key] < 50 ? 'low' : 'high');
+
+  const ranked = AXIS_KEYS.filter((key) => bands[key] !== 'mid')
+    .map((key) => ({ key, dist: Math.abs(axes[key] - 50) }))
+    .sort((a, b) => b.dist - a.dist || AXIS_KEYS.indexOf(a.key) - AXIS_KEYS.indexOf(b.key));
+
+  if (ranked.length === 0) return FLAT_ARCHETYPE;
+
+  const noun = NAMES[ranked[0].key][side(ranked[0].key)].noun;
+  if (ranked.length === 1) return noun;
+
+  return `${NAMES[ranked[1].key][side(ranked[1].key)].adj} ${noun}`;
+}
 
 /* ------------------------------------------------------------------ *
  * 공개 API
@@ -422,7 +452,13 @@ export type PersonaCard = {
   bands: Record<AxisKey, Band>;
   /** 구간에서 나온 특성 이름들. 결과 화면에 그대로 뿌려도 됩니다 */
   traits: string[];
-  /** 축 조합에서 나온 한 줄 성격. 예: "섬세한 츤데레" */
+  /**
+   * 가장 튀는 축 두 개로 만든 한 줄 이름. 예: "혼자 있는 까칠이"
+   *
+   * **결과 화면 표시용입니다.** 대사 프롬프트에는 넣지 마세요.
+   * 구체적인 축 값을 두고 추상 라벨을 같이 주면, 모델이 라벨의 통념 쪽으로
+   * 과장해서 연기합니다. 대사는 `axes`와 `bands`를 보고 정하는 게 맞습니다.
+   */
   archetype: string;
 };
 
@@ -447,11 +483,7 @@ export function synthesize(rawMix: unknown): PersonaCard {
     traits.push(traitOf(key, value));
   }
 
-  const archetype = ARCHETYPE_RULES.map(
-    (rule) => rule.table[bands[rule.axes[0]]][bands[rule.axes[1]]],
-  ).join(' ');
-
-  return { mix, axes, bands, traits, archetype };
+  return { mix, axes, bands, traits, archetype: archetypeOf(axes, bands) };
 }
 
 /** 품종 하나만 아는 경우의 지름길. */
