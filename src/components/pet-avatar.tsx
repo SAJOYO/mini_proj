@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-nativ
 
 import { FloatingEmojis } from '@/components/floating-emojis';
 import { PetCharacter } from '@/components/pet-character';
+import { Scene, sceneForBreed } from '@/components/pet-scene';
 import type { AnimationName, BreedId } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -211,26 +212,25 @@ export function PetAvatar({
         accessibilityLabel={`${stage.label} 캐릭터 쓰다듬기`}
         // 손가락으로 잡기 좋게 살짝 여유를 둡니다.
         hitSlop={8}>
-        <Animated.View
-          style={[
-            styles.stand,
-            {
-              width: standSize,
-              height: standSize,
-              backgroundColor: c.surfaceAlt,
-              transform: [{ translateY }, { translateX }, { scale }],
-            },
-          ]}>
-          {/* 시무룩할 땐 동작(droop)으로 이미 드러나므로, 투명도까지 낮추면
-              캐릭터가 사라져 가는 것처럼 보입니다. 살짝만 눌러 둡니다. */}
-          <View style={{ opacity: sad ? 0.85 : 1 }}>
-            <PetCharacter
-              breed={breed}
-              stage={stage.id}
-              animation={animationFor(activity, sad)}
-              size={size}
-            />
-          </View>
+        {/* 배경(씬)은 고정이고 캐릭터만 움직입니다.
+            씬까지 같이 튀면 방 전체가 들썩여서 멀미가 납니다. */}
+        <View style={{ width: standSize, height: standSize }}>
+          <Scene kind={sceneForBreed(breed)}>
+            <Animated.View
+              style={{
+                opacity: sad ? 0.85 : 1,
+                transform: [{ translateY }, { translateX }, { scale }],
+              }}>
+              {/* 시무룩할 땐 동작(droop)으로 이미 드러나므로, 투명도까지 낮추면
+                  캐릭터가 사라져 가는 것처럼 보입니다. 살짝만 눌러 둡니다. */}
+              <PetCharacter
+                breed={breed}
+                stage={stage.id}
+                animation={animationFor(activity, sad)}
+                size={size}
+              />
+            </Animated.View>
+          </Scene>
 
           {reactEmoji ? <FloatingEmojis emoji={reactEmoji} trigger={reactKey} /> : null}
 
@@ -241,11 +241,8 @@ export function PetAvatar({
               <Text style={styles.activityBadgeText}>{activityEmoji}</Text>
             </View>
           ) : null}
-        </Animated.View>
+        </View>
       </Pressable>
-
-      {/* 발밑 그림자 — 떠 있는 느낌을 잡아줍니다 */}
-      <View style={[styles.shadow, { width: size * 0.7, backgroundColor: c.border }]} />
 
       <Text style={[styles.stageLabel, { color: c.textSecondary }]}>
         {stage.label}
@@ -262,18 +259,6 @@ export function PetAvatar({
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
-  },
-  stand: {
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'visible',
-  },
-  shadow: {
-    height: 6,
-    borderRadius: Radius.pill,
-    opacity: 0.6,
-    marginTop: Spacing.xs,
   },
   stageLabel: {
     fontSize: FontSize.caption,

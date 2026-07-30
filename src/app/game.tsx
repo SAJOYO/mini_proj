@@ -265,9 +265,32 @@ export default function GameScreen() {
           </Text>
           <Text style={[styles.days, { color: c.textSecondary }]}>함께한 {days + 1}일째</Text>
         </View>
-        <Pressable onPress={() => void handleRelease()} hitSlop={8}>
-          <Text style={[styles.reset, { color: c.textSecondary }]}>다시 키우기</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => void handleRelease()} hitSlop={8}>
+            <Text style={[styles.reset, { color: c.textSecondary }]}>다시 키우기</Text>
+          </Pressable>
+
+          {/*
+            TODO(김경빈): 이미지 생성 화면으로 넘어가는 자리입니다.
+            지금 키우는 캐릭터로 사진을 만들려면 세 가지가 필요합니다.
+              router.push({
+                pathname: '/photo-gen',
+                params: { breed: pet.breed, stage: stage.id, photoUri: pet.photoUri ?? '' },
+              })
+            breed는 한글 이름이 아니라 constants/pet.ts의 키입니다.
+            생성이 끝나면 결과 URI만 돌려주면 됩니다 — 게임 쪽은 안 건드려도 됩니다.
+          */}
+          <Pressable
+            onPress={() => {}}
+            disabled
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="사진 만들기 (준비 중)"
+            style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Text style={styles.photoIcon}>📷</Text>
+            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>사진 만들기</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.stageWrap}>
@@ -629,6 +652,28 @@ const styles = StyleSheet.create({
   reset: {
     fontSize: FontSize.caption,
     textDecorationLine: 'underline',
+  },
+  headerActions: {
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+  },
+  photoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    // 아직 동작하지 않는 자리라는 걸 눌러보기 전에 알 수 있게 눌러 둡니다.
+    opacity: 0.55,
+  },
+  photoIcon: {
+    fontSize: 15,
+  },
+  photoLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
   },
   stageWrap: {
     alignItems: 'center',
