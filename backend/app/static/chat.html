@@ -232,7 +232,7 @@
   }
 
   let characters = loadCharacters();
-  let currentCharacterId = characters[0]?.characterId ?? null;
+  let currentNickname = characters[0]?.nickname ?? null;
   const historyByCharacter = {};
 
   const tabsEl = document.getElementById("characterTabs");
@@ -246,9 +246,9 @@
     tabsEl.innerHTML = "";
     for (const c of characters) {
       const tab = document.createElement("div");
-      tab.className = "character-tab" + (c.characterId === currentCharacterId ? " active" : "");
+      tab.className = "character-tab" + (c.nickname === currentNickname ? " active" : "");
       tab.textContent = c.nickname;
-      tab.addEventListener("click", () => selectCharacter(c.characterId));
+      tab.addEventListener("click", () => selectCharacter(c.nickname));
       tabsEl.appendChild(tab);
     }
     const addTab = document.createElement("div");
@@ -260,14 +260,14 @@
     tabsEl.appendChild(addTab);
   }
 
-  function selectCharacter(characterId) {
-    currentCharacterId = characterId;
+  function selectCharacter(nickname) {
+    currentNickname = nickname;
     createPanelEl.style.display = "none";
     inputEl.disabled = false;
     sendBtn.disabled = false;
     renderTabs();
-    if (!historyByCharacter[characterId]) {
-      historyByCharacter[characterId] = [];
+    if (!historyByCharacter[nickname]) {
+      historyByCharacter[nickname] = [];
     }
     renderMessages();
     inputEl.focus();
@@ -275,11 +275,11 @@
 
   function renderMessages() {
     messagesEl.innerHTML = "";
-    const history = currentCharacterId ? (historyByCharacter[currentCharacterId] || []) : [];
+    const history = currentNickname ? (historyByCharacter[currentNickname] || []) : [];
     if (history.length === 0) {
       const hint = document.createElement("div");
       hint.className = "empty-hint";
-      hint.textContent = currentCharacterId
+      hint.textContent = currentNickname
         ? "인사를 건네보세요!"
         : "오른쪽 위 + 탭에서 캐릭터를 먼저 만들어주세요!";
       messagesEl.appendChild(hint);
@@ -322,7 +322,6 @@
       alert("닉네임과 동물 종류는 필수예요.");
       return;
     }
-    const characterId = "char-" + Math.random().toString(36).slice(2, 10);
     const breeds = parseBreeds(breedsText);
 
     try {
@@ -330,7 +329,6 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          characterId,
           nickname,
           animalType,
           breeds,
@@ -347,21 +345,23 @@
       return;
     }
 
-    characters.push({ characterId, nickname, animalType });
-    saveCharacters(characters);
+    if (!characters.some((c) => c.nickname === nickname)) {
+      characters.push({ nickname, animalType });
+      saveCharacters(characters);
+    }
     document.getElementById("nicknameInput").value = "";
     document.getElementById("animalTypeInput").value = "";
     document.getElementById("breedsInput").value = "";
-    selectCharacter(characterId);
+    selectCharacter(nickname);
   });
 
   formEl.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!currentCharacterId) return;
+    if (!currentNickname) return;
     const text = inputEl.value.trim();
     if (!text) return;
 
-    const history = historyByCharacter[currentCharacterId];
+    const history = historyByCharacter[currentNickname];
     history.push({ role: "user", content: text });
     inputEl.value = "";
     sendBtn.disabled = true;
@@ -375,7 +375,7 @@
       const res = await fetch(`${API_BASE}/api/chat/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ characterId: currentCharacterId, message: text }),
+        body: JSON.stringify({ nickname: currentNickname, message: text }),
       });
       const idx = history.indexOf(typingMsg);
       if (!res.ok) {
@@ -397,8 +397,8 @@
   });
 
   renderTabs();
-  if (currentCharacterId) {
-    selectCharacter(currentCharacterId);
+  if (currentNickname) {
+    selectCharacter(currentNickname);
   } else {
     renderMessages();
   }

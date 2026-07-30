@@ -36,7 +36,6 @@ class BreedInfo(BaseModel):
 class CharacterUpsertRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    character_id: str = Field(alias="characterId")
     nickname: str
     animal_type: str = Field(alias="animalType")
     breeds: list[BreedInfo] = []
@@ -44,37 +43,35 @@ class CharacterUpsertRequest(BaseModel):
 
 
 class CharacterResponse(BaseModel):
-    character_id: str
+    nickname: str
     status: str
 
 
 @app.post("/api/characters", response_model=CharacterResponse, status_code=201)
 def upsert_character(req: CharacterUpsertRequest) -> CharacterResponse:
-    """앞단이 보낸 characterId/nickname/animalType/breeds를 저장(신규면 생성, 기존이면 갱신)한다."""
+    """앞단이 보낸 nickname/animalType/breeds를 저장(신규면 생성, 기존이면 갱신)한다."""
     db = SessionLocal()
     try:
-        character = db.get(Character, req.character_id)
+        character = db.get(Character, req.nickname)
         if character is None:
             character = Character(
-                character_id=req.character_id,
-                user_id=req.user_id,
                 nickname=req.nickname,
+                user_id=req.user_id,
                 animal_type=req.animal_type,
             )
             db.add(character)
         else:
-            character.nickname = req.nickname
             character.animal_type = req.animal_type
             if req.user_id is not None:
                 character.user_id = req.user_id
             db.query(CharacterBreed).filter(
-                CharacterBreed.character_id == req.character_id
+                CharacterBreed.nickname == req.nickname
             ).delete()
 
         for breed in req.breeds:
             db.add(
                 CharacterBreed(
-                    character_id=req.character_id,
+                    nickname=req.nickname,
                     breed=breed.breed,
                     percent=breed.percent,
                 )
@@ -84,13 +81,11 @@ def upsert_character(req: CharacterUpsertRequest) -> CharacterResponse:
     finally:
         db.close()
 
-    return CharacterResponse(character_id=req.character_id, status="saved")
+    return CharacterResponse(nickname=req.nickname, status="saved")
 
 
 class ChatRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    character_id: str = Field(alias="characterId")
+    nickname: str
     message: str
 
 
@@ -102,7 +97,7 @@ class ChatResponse(BaseModel):
 def chat(req: ChatRequest) -> ChatResponse:
     db = SessionLocal()
     try:
-        character = db.get(Character, req.character_id)
+        character = db.get(Character, req.nickname)
         if character is None:
             raise HTTPException(
                 status_code=404,
@@ -111,13 +106,13 @@ def chat(req: ChatRequest) -> ChatResponse:
 
         breeds = (
             db.query(CharacterBreed)
-            .filter(CharacterBreed.character_id == req.character_id)
+            .filter(CharacterBreed.nickname == req.nickname)
             .all()
         )
 
         rows = (
             db.query(Message)
-            .filter(Message.character_id == req.character_id)
+            .filter(Message.nickname == req.nickname)
             .order_by(Message.id.desc())
             .limit(MAX_TURNS * 2)
             .all()
@@ -137,8 +132,8 @@ def chat(req: ChatRequest) -> ChatResponse:
                 detail="지금 동물 친구가 너무 바빠서 대답을 못 들었어요. 잠시 후 다시 시도해주세요.",
             )
 
-        db.add(Message(character_id=req.character_id, role="user", content=req.message))
-        db.add(Message(character_id=req.character_id, role="assistant", content=reply))
+        db.add(Message(nickname=req.nickname, role="user", content=req.message))
+        db.add(Message(nickname=req.nickname, role="assistant", content=reply))
         db.commit()
     finally:
         db.close()

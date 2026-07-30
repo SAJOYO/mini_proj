@@ -1,6 +1,6 @@
 """SQLite 기반 캐릭터/대화 히스토리 영속화.
 
-캐릭터(characterId)를 기준으로 대화가 구분되고, 서버 재시작에도 유지된다.
+캐릭터는 nickname을 식별자(기본키)로 구분되고, 서버 재시작에도 유지된다.
 DATABASE_URL 환경변수로 다른 DB(Postgres 등)로 교체 가능.
 """
 
@@ -24,16 +24,16 @@ class Base(DeclarativeBase):
 class Character(Base):
     """앞단에서 생성한 캐릭터 1개 = 대화 상대 1명.
 
-    한 명의 사용자가 여러 캐릭터를 만들 수 있으므로 user_id는 characterId와 별도로 둔다
+    nickname이 곧 식별자(기본키)다 — 별도의 character_id 컬럼은 두지 않는다.
+    한 명의 사용자가 여러 캐릭터를 만들 수 있으므로 user_id는 nickname과 별도로 둔다
     (지금은 로그인이 없어 nullable — 클라이언트가 생성한 임의 user_id를 그대로 저장).
     animal_type/breed는 강아지·고양이로 제한하지 않고 앞단이 보내주는 값을 그대로 저장한다.
     """
 
     __tablename__ = "characters"
 
-    character_id: Mapped[str] = mapped_column(String, primary_key=True)
+    nickname: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
-    nickname: Mapped[str] = mapped_column(String)
     animal_type: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
@@ -46,21 +46,21 @@ class CharacterBreed(Base):
     __tablename__ = "character_breeds"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    character_id: Mapped[str] = mapped_column(
-        ForeignKey("characters.character_id"), index=True
+    nickname: Mapped[str] = mapped_column(
+        ForeignKey("characters.nickname"), index=True
     )
     breed: Mapped[str] = mapped_column(String)
     percent: Mapped[int] = mapped_column(Integer)
 
 
 class Message(Base):
-    """캐릭터별 대화 메시지. character_id로 히스토리를 구분/조회한다."""
+    """캐릭터별 대화 메시지. nickname으로 히스토리를 구분/조회한다."""
 
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    character_id: Mapped[str] = mapped_column(
-        ForeignKey("characters.character_id"), index=True
+    nickname: Mapped[str] = mapped_column(
+        ForeignKey("characters.nickname"), index=True
     )
     role: Mapped[str] = mapped_column(String)
     content: Mapped[str] = mapped_column(Text)
