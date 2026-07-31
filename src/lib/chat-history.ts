@@ -86,7 +86,7 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   `);
 }
 
-/** 메시지 한 건을 붙입니다. 실패한 응답도 저장합니다(화면 복원용, failed 플래그). */
+/** 메시지 한 건을 붙입니다. 실패한 응답도 저장하되 failed 플래그로 구분합니다 — 읽는 쪽이 LLM 히스토리에서 걸러냅니다. */
 export async function appendMessage(
   petId: string,
   message: { role: 'user' | 'assistant'; content: string; failed?: boolean },

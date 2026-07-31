@@ -75,14 +75,14 @@ const CHAT = chatTarget();
 /** 안내 문구가 스스로 사라지기까지. */
 const NOTICE_MS = 5000;
 
-/** 화면에 복원하는 최대 기록. 저장은 전부 하고, 복원만 자릅니다. */
-const RESTORE_LIMIT = 200;
-
 /**
  * LLM 에 보내는 히스토리 창. 기록이 영구가 되는 순간 대화가 길어질수록
  * 매 요청 토큰이 무한정 자랍니다 — 저장은 전부, 전송은 최근 이만큼만.
  */
 const LLM_WINDOW = 20;
+
+/** 실패 메시지를 걸러도 창이 차도록 여유 있게 읽습니다. */
+const DB_READ_LIMIT = LLM_WINDOW * 2;
 
 export default function ChatScreen() {
   const c = useTheme();
@@ -120,24 +120,14 @@ export default function ChatScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    loadAnalysis().then(async (saved) => {
+    loadAnalysis().then((saved) => {
       if (cancelled) return;
       if (saved) setMix(resolveMix(saved.mix));
       setAnalyzed(saved !== null);
-
-      // 지난 대화를 복원합니다. 새로고침해도 기록이 이어집니다.
       petIdRef.current = saved?.createdAt ?? 'neutral';
-      const stored = await loadRecent(petIdRef.current, RESTORE_LIMIT);
-      if (cancelled || stored.length === 0) return;
-      setMessages(
-        stored.map((m) => ({
-          id: `db-${m.id}`,
-          role: m.role,
-          content: m.content,
-          createdAt: m.createdAt,
-          failed: m.failed || undefined,
-        })),
-      );
+      // 화면은 일부러 복원하지 않습니다. 새로고침하면 빈 화면에서 시작하되,
+      // 맥락은 DB 에서 LLM 히스토리로만 이어집니다(send 참고) — 진짜
+      // 반려동물처럼 대화록은 없지만 기억은 있는 상태를 만듭니다.
     });
     return () => {
       cancelled = true;
@@ -171,10 +161,15 @@ export default function ChatScreen() {
     setNotice(null);
     setDraft('');
 
-    // 실패한 답은 히스토리에서 빼고(에러 문구를 캐릭터가 한 말로 기억시키면
-    // 다음 대답이 그걸 이어받습니다), 최근 LLM_WINDOW 건만 보냅니다.
+    // 히스토리는 화면이 아니라 DB 에서 읽습니다. 화면은 새로고침마다 비지만
+    // DB 에는 지난 대화가 있어서, 캐릭터의 기억이 세션을 넘어 이어집니다.
+    // 이번 사용자 메시지를 DB 에 넣기 **전에** 읽으므로 중복이 없습니다.
+    //
+    // 실패한 답은 뺍니다 — 에러 문구를 캐릭터가 한 말로 기억시키면 다음
+    // 대답이 그걸 이어받습니다. 창(LLM_WINDOW)을 자르는 이유는 위 상수 참고.
+    const stored = await loadRecent(petIdRef.current, DB_READ_LIMIT);
     const history: ChatTurn[] = [
-      ...messages
+      ...stored
         .filter((m) => !m.failed)
         .slice(-LLM_WINDOW)
         .map(({ role, content }) => ({ role, content })),
