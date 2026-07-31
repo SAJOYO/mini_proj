@@ -82,6 +82,49 @@ export const REST_POSE: PetPose = {
 /** [시작값, 끝값, 편도 시간(ms)] — 이 둘 사이를 계속 왕복합니다. */
 type Channel = readonly [from: number, to: number, ms: number];
 
+/** 동작이 바뀔 때 눈·입이 새 값으로 옮겨가는 데 걸리는 시간(ms). */
+const FACE_BLEND_MS = 220;
+
+/** 얼굴 보간을 갱신하는 간격(ms). 눈·입은 형태가 단순해서 이 정도면 부드럽습니다. */
+const FACE_BLEND_STEP_MS = 32;
+
+/**
+ * 동작이 바뀔 때 눈·입을 곧바로 갈아끼우지 않고 잠깐에 걸쳐 옮깁니다.
+ *
+ * 움직이는 부위(고개·꼬리·귀…)는 shared value라 새 동작으로 자연스럽게
+ * 이어지는데, **눈 뜬 정도와 입 벌린 정도는 SVG path를 다시 만드는 값이라
+ * 일반 state입니다.** 그대로 두면 동작을 바꾸는 순간 눈과 입이 한 프레임에
+ * 팍 바뀝니다. 평소에는 동작이 거의 안 바뀌어서 티가 안 났지만, 대기 동작을
+ * 번갈아 트는 지금은 몇 초마다 이 튐이 반복됩니다.
+ *
+ * 깜빡임은 여기를 거치지 않습니다 — 눈 깜빡임은 원래 순간적인 동작이라
+ * 부드럽게 만들면 오히려 졸린 것처럼 보입니다.
+ */
+function useBlended(target: number): number {
+  const [value, setValue] = useState(target);
+
+  useEffect(() => {
+    if (value === target) return;
+
+    const from = value;
+    const startedAt = Date.now();
+
+    const timer = setInterval(() => {
+      const t = Math.min(1, (Date.now() - startedAt) / FACE_BLEND_MS);
+      // ease-out — 처음엔 빠르게 움직이고 끝에서 부드럽게 붙습니다.
+      setValue(from + (target - from) * (1 - (1 - t) * (1 - t)));
+      if (t >= 1) clearInterval(timer);
+    }, FACE_BLEND_STEP_MS);
+
+    return () => clearInterval(timer);
+    // value를 의존성에 넣으면 한 스텝마다 effect가 새로 돌아 보간이 처음부터
+    // 다시 시작합니다. 목표값이 바뀔 때만 새로 걸어야 합니다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  return value;
+}
+
 type MotionSpec = {
   bodyLift?: Channel;
   bodySquash?: Channel;
@@ -89,7 +132,10 @@ type MotionSpec = {
   earFlap?: Channel;
   tailWag?: Channel;
   muzzleBob?: Channel;
-  /** 움직이지 않는 값들 */
+  /**
+   * 왕복하지 않고 동작 내내 고정인 값들. 다만 **동작이 바뀔 때는** 곧바로
+   * 갈아끼우지 않고 잠깐에 걸쳐 옮겨갑니다 (useBlended 참고).
+   */
   eyeOpen: number;
   mouthOpen: number;
   /** 가끔 눈을 깜빡입니다. 자거나 아플 땐 끕니다. */
@@ -360,11 +406,14 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   const headRx = 48;
   const headRy = headRx / (preset.headRatio ?? 48 / 42);
 
-  const rawEyeOpen =
-    blinkEnabled && blinking ? 0 : (frozen?.eyeOpen ?? spec?.eyeOpen ?? REST_POSE.eyeOpen);
+  // 동작이 바뀌면 이 두 값이 잠깐에 걸쳐 옮겨갑니다(useBlended 설명 참고).
+  const blendedEye = useBlended(frozen?.eyeOpen ?? spec?.eyeOpen ?? REST_POSE.eyeOpen);
+  const blendedMouth = useBlended(frozen?.mouthOpen ?? spec?.mouthOpen ?? REST_POSE.mouthOpen);
+
+  const rawEyeOpen = blinkEnabled && blinking ? 0 : blendedEye;
   // 아기는 눈을 다 못 뜨고, 노년은 눈이 조금 처집니다. 단계별 최대치로 눌러줍니다.
   const eyeOpen = Math.min(rawEyeOpen, stage.eyeOpenMax);
-  const mouthOpen = frozen?.mouthOpen ?? spec?.mouthOpen ?? REST_POSE.mouthOpen;
+  const mouthOpen = blendedMouth;
 
   // 모든 움직임을 표준 SVG transform 문자열로 넘깁니다.
   // react-native-svg의 translateY/scaleY 같은 개별 prop은 웹에서 DOM 속성으로
