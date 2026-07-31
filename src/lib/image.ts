@@ -117,3 +117,77 @@ export async function toVisionImage(
   const buffer = await new File(uri).arrayBuffer();
   return { mimeType, base64: bytesToBase64(new Uint8Array(buffer)) };
 }
+
+/**
+ * 고른 사진을 **지워지지 않는 곳으로 옮깁니다.** 옮긴 뒤의 주소를 돌려줍니다.
+ *
+ * ## 왜 필요한가
+ *
+ * 이미지 피커는 사진을 앱 **캐시** 폴더에 둡니다. 안드로이드는 저장 공간이
+ * 부족하면 캐시를 언제든 비우기 때문에, 주소만 저장소에 남고 파일은 사라집니다.
+ * 실제로 폰에서 이렇게 났습니다.
+ *
+ *   FileNotFoundException: .../cache/.../ImagePicker/8df2....jpeg
+ *   ENOENT (No such file or directory)
+ *
+ * 그러면 올린 사진이 빈칸으로 보이고, 사진 생성도 판정도 할 수 없습니다.
+ * `survivesReload`는 이걸 못 걸러냅니다 — blob:이 아니라 file: 이라서
+ * "살아 있다"고 보거든요. 경로가 캐시인지 아닌지는 구분하지 않습니다.
+ *
+ * ## 웹에서는 아무 일도 하지 않습니다
+ *
+ * 웹의 blob: 은 파일이 아니라 탭 메모리에 있는 것이라 옮길 데가 없습니다.
+ * 그대로 돌려주고, 죽었는지는 쓰는 쪽에서 확인합니다.
+ */
+export async function persistPhoto(uri: string): Promise<string> {
+  if (!uri.startsWith('file://')) return uri;
+
+  try {
+    const { Directory, File, Paths } = await import('expo-file-system');
+
+    const folder = new Directory(Paths.document, 'photos');
+    if (!folder.exists) folder.create({ intermediates: true, idempotent: true });
+
+    // 한 번에 한 장만 쓰므로 앞의 사진은 지웁니다. 안 그러면 고를 때마다 쌓입니다.
+    for (const entry of folder.list()) {
+      try {
+        entry.delete();
+      } catch {
+        // 지우지 못해도 새 사진을 저장하는 데는 지장이 없습니다.
+      }
+    }
+
+    const source = new File(uri);
+    // extension은 점을 포함해서 옵니다(".jpeg"). 그대로 이어붙이면 "source..jpeg"가 됩니다.
+    const extension = source.extension?.replace(/^\./, '') || 'jpg';
+    const target = new File(folder, `source.${extension}`);
+    source.copy(target);
+
+    return target.uri;
+  } catch {
+    // 옮기지 못하면 원래 주소를 그대로 씁니다. 당장은 동작하고, 캐시가
+    // 비워질 때까지는 문제가 없습니다.
+    return uri;
+  }
+}
+
+/**
+ * 이 사진을 **지금 읽을 수 있는가.**
+ *
+ * `survivesReload`가 "새로고침을 견디는 형태인가"를 형태만 보고 판단하는 것과
+ * 달리, 실제로 파일이 있는지 확인합니다. 캐시가 비워져 사라진 사진을 걸러내는
+ * 것이 목적이라, 저장소에서 복원할 때 씁니다.
+ *
+ * 웹의 blob: 은 여기서 판단하지 않습니다(동기적으로 확인할 방법이 없습니다).
+ * 형태 검사는 survivesReload가 이미 하고 있으니 그쪽을 쓰세요.
+ */
+export async function photoFileExists(uri: string): Promise<boolean> {
+  if (!uri.startsWith('file://')) return true;
+
+  try {
+    const { File } = await import('expo-file-system');
+    return new File(uri).exists;
+  } catch {
+    return false;
+  }
+}

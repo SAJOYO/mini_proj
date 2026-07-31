@@ -9,7 +9,7 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { survivesReload, toVisionImage } from '@/lib/image';
+import { persistPhoto, photoFileExists, survivesReload, toVisionImage } from '@/lib/image';
 import { visionTarget } from '@/lib/llm/config';
 import { confirmAction, notify } from '@/lib/dialog';
 import { usePet } from '@/lib/pet';
@@ -55,10 +55,12 @@ export default function PhotoScreen() {
     // 웹의 blob: 은 문자열만 남고 데이터가 사라져서, 복원하면 사진이 있는 것처럼
     // 보이는데 실제로는 못 읽습니다 (콘솔에 ERR_FILE_NOT_FOUND).
     // 지우면 "눌러서 사진 고르기" 상태로 돌아가고, 다시 고르면 정상입니다.
+    // 네이티브도 마찬가지입니다 — 형태는 멀쩡한 file: 인데 파일이 없을 수 있어서
+    // (캐시가 비워진 경우) 실제로 있는지까지 확인합니다. 안 그러면 빈칸만 보입니다.
     loadPhotoUri().then(async (uri) => {
       if (cancelled) return;
-      if (survivesReload(uri)) {
-        setPhotoUri(uri);
+      if (uri && survivesReload(uri) && (await photoFileExists(uri))) {
+        if (!cancelled) setPhotoUri(uri);
       } else if (uri) {
         await clearPhotoUri();
       }
@@ -75,9 +77,13 @@ export default function PhotoScreen() {
     const asset = result.assets[0];
     if (!asset?.uri) return;
 
-    setPhotoUri(asset.uri);
+    // 피커는 사진을 캐시에 둡니다. OS가 캐시를 비우면 파일이 사라지므로
+    // 지워지지 않는 곳으로 옮겨두고 그 주소를 저장합니다 (lib/image.ts 참고).
+    const uri = await persistPhoto(asset.uri);
+
+    setPhotoUri(uri);
     setPhotoBase64(asset.base64 ?? null);
-    await savePhotoUri(asset.uri);
+    await savePhotoUri(uri);
   }
 
   /**
