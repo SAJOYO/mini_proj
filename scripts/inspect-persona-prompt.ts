@@ -10,7 +10,8 @@
 
 import { AXES, AXIS_KEYS, synthesize, traitOf, type BreedMix } from '@/lib/persona';
 import { BREEDS, type BreedId } from '@/constants/pet';
-import { SHARED_RULES, characterBlock } from '@/lib/persona-chat/system-prompt';
+import { DEFAULT_MAX_TOKENS } from '@/lib/persona-chat/chat-client';
+import { SHARED_RULES, characterBlock, strategyBlock } from '@/lib/persona-chat/system-prompt';
 
 const out = (line = '') => process.stdout.write(`${line}\n`);
 
@@ -35,8 +36,8 @@ out('════════ 입력 ════════');
 out(card.mix.map((m) => `${BREEDS[m.breed].label} ${Math.round(m.ratio)}`).join(' / '));
 out();
 
-out('════════ 축 → 말버릇 대응 ════════');
-out('축이 mid면 말버릇에 안 들어갑니다. 튀는 축만 지시가 됩니다.');
+out('════════ 축 → 기질 대응 ════════');
+out('축이 mid면 기질에 안 들어갑니다. 튀는 축만 서술이 됩니다.');
 out();
 for (const key of AXIS_KEYS) {
   const value = card.axes[key];
@@ -53,16 +54,21 @@ out('════════ 블록 1 — 전 사용자 공통 (캐시 대상) 
 out(SHARED_RULES);
 out();
 
-out('════════ 블록 2 — 이 캐릭터 (캐시 대상) ════════');
+out('════════ 블록 2 — 정체성 + 기질 (캐릭터별) ════════');
 out(characterBlock(card, name));
+out();
+
+out('════════ 블록 3 — 표현 전략 (맨 뒤 = 제일 강함) ════════');
+out(strategyBlock(card));
 out();
 
 out('════════ 실제 요청 구조 ════════');
 out('messages: [');
 out('  { role: "system",    content: <블록 1> },');
 out('  { role: "system",    content: <블록 2> },');
+out('  { role: "system",    content: <블록 3> },');
 out('  { role: "user",      content: "안녕" },');
 out('  { role: "assistant", content: <직전 답변> },   ← 히스토리 누적');
 out('  { role: "user",      content: "..." },');
 out(']');
-out('max_tokens: 200      temperature: 보내지 않음');
+out(`max_tokens: ${DEFAULT_MAX_TOKENS}      temperature: 보내지 않음`);

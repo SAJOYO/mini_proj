@@ -21,7 +21,17 @@ type PersonaClientOptions = {
   apiKey: string;
   /** `/v1`까지 포함한 API 기준 URL. */
   baseUrl: string;
-  /** 한 번에 낼 수 있는 최대 길이. 짧게 잡아야 캐릭터가 수다스러워지지 않습니다. */
+  /**
+   * 폭주 방지 상한. **길이 제어가 아닙니다.**
+   *
+   * 이걸로 조이면 짧게 쓰는 게 아니라 쓰던 문장이 잘립니다(실측: "나 지금
+   * 눈물 찔끔 날 것 같" 에서 끊겼습니다). 캐릭터가 음절 중간에 말을 멈추면
+   * 과묵한 게 아니라 고장 난 걸로 보입니다.
+   *
+   * 말의 길이는 성격이 정하고(표현 축), 상한은 프롬프트가 겁니다("길어도
+   * 3~4문장"). 이 값은 그 위에서 무한 루프만 막는 안전망이라, 정상 응답에는
+   * 절대 닿지 않을 높이로 둡니다.
+   */
   maxTokens?: number;
   extraBody?: Record<string, unknown>;
   fetchImpl?: typeof fetch;
@@ -38,6 +48,9 @@ type PersonaClientOptions = {
  * 필요하고 다른 쪽은 히스토리가 필요해서, 앞으로 각자 다른 방향으로
  * 벌어집니다. 공유하는 건 전송뿐입니다.
  */
+/** 진단 스크립트(inspect-persona-prompt)도 이 값을 찍습니다. 여기만 고치세요. */
+export const DEFAULT_MAX_TOKENS = 400;
+
 export class ChatCompletionsPersonaClient implements PersonaChatClient {
   private readonly client: ChatCompletionsClient;
   private readonly maxTokens: number;
@@ -45,7 +58,7 @@ export class ChatCompletionsPersonaClient implements PersonaChatClient {
   constructor({
     apiKey,
     baseUrl,
-    maxTokens = 200,
+    maxTokens = DEFAULT_MAX_TOKENS,
     extraBody = {},
     fetchImpl,
   }: PersonaClientOptions) {
