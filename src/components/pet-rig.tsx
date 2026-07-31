@@ -484,64 +484,113 @@ export function PetRig({ preset, stage = NEUTRAL_STAGE, size, animation, pose }:
   // 워크릿(UI 스레드에서 도는 함수) **안에서** WEB을 읽으면 안 됩니다.
   // 모듈 스코프 변수는 워크릿에 딸려가지 않아서 "WEB is not defined"로 죽습니다.
   // 그래서 분기를 바깥에 두고, 플랫폼에 맞는 함수 자체를 골라 넘깁니다.
+  // 각 함수에 'worklet' 지시자를 직접 답니다. Reanimated의 Babel 플러그인은
+  // 훅에 **인라인으로 바로 넘긴** 함수만 자동으로 워크릿으로 바꿔줍니다.
+  // 아래처럼 삼항으로 감싸면 그 자동 변환이 일어나지 않아, 일반 JS 함수가
+  // UI 스레드에서 불리면서 "Tried to synchronously call a Remote Function"으로
+  // 죽습니다. 지시자를 달면 위치와 무관하게 워크릿이 됩니다.
   const rootProps = useAnimatedProps<RigProps>(
-    WEB ? () => ({ transform: `translate(0, ${bodyLift.value})` }) : () => ({ y: bodyLift.value }),
+    WEB
+      ? () => {
+          'worklet';
+          return { transform: `translate(0, ${bodyLift.value})` };
+        }
+      : () => {
+          'worklet';
+          return { y: bodyLift.value };
+        },
     [],
   );
   // 몸통은 세로로만 눌렸다 펴집니다. 기준점을 몸통에 두어 발이 바닥에 붙어 있게 합니다.
   const bodyProps = useAnimatedProps<RigProps>(
     WEB
-      ? () => ({
-          transform: `translate(${ANCHOR.body.x}, ${ANCHOR.body.y}) scale(1, ${bodySquash.value}) translate(${-ANCHOR.body.x}, ${-ANCHOR.body.y})`,
-        })
-      : () => ({
-          scaleX: 1,
-          scaleY: bodySquash.value,
-          originX: ANCHOR.body.x,
-          originY: ANCHOR.body.y,
-        }),
+      ? () => {
+          'worklet';
+          return {
+            transform: `translate(${ANCHOR.body.x}, ${ANCHOR.body.y}) scale(1, ${bodySquash.value}) translate(${-ANCHOR.body.x}, ${-ANCHOR.body.y})`,
+          };
+        }
+      : () => {
+          'worklet';
+          return {
+            scaleX: 1,
+            scaleY: bodySquash.value,
+            originX: ANCHOR.body.x,
+            originY: ANCHOR.body.y,
+          };
+        },
     [],
   );
   const headProps = useAnimatedProps<RigProps>(
     WEB
-      ? () => ({ transform: `rotate(${headTilt.value}, ${ANCHOR.neck.x}, ${ANCHOR.neck.y})` })
-      : () => ({ rotation: headTilt.value, originX: ANCHOR.neck.x, originY: ANCHOR.neck.y }),
+      ? () => {
+          'worklet';
+          return { transform: `rotate(${headTilt.value}, ${ANCHOR.neck.x}, ${ANCHOR.neck.y})` };
+        }
+      : () => {
+          'worklet';
+          return { rotation: headTilt.value, originX: ANCHOR.neck.x, originY: ANCHOR.neck.y };
+        },
     [],
   );
   const tailProps = useAnimatedProps<RigProps>(
     WEB
-      ? () => ({ transform: `rotate(${tailWag.value}, ${ANCHOR.tail.x}, ${ANCHOR.tail.y})` })
-      : () => ({ rotation: tailWag.value, originX: ANCHOR.tail.x, originY: ANCHOR.tail.y }),
+      ? () => {
+          'worklet';
+          return { transform: `rotate(${tailWag.value}, ${ANCHOR.tail.x}, ${ANCHOR.tail.y})` };
+        }
+      : () => {
+          'worklet';
+          return { rotation: tailWag.value, originX: ANCHOR.tail.x, originY: ANCHOR.tail.y };
+        },
     [],
   );
   const muzzleProps = useAnimatedProps<RigProps>(
     WEB
-      ? () => ({ transform: `translate(0, ${muzzleBob.value})` })
-      : () => ({ y: muzzleBob.value }),
+      ? () => {
+          'worklet';
+          return { transform: `translate(0, ${muzzleBob.value})` };
+        }
+      : () => {
+          'worklet';
+          return { y: muzzleBob.value };
+        },
     [],
   );
   const earLeftProps = useAnimatedProps<RigProps>(
     WEB
-      ? () => ({
-          transform: `rotate(${-(earAngle + earFlap.value)}, ${ANCHOR.earLeft.x}, ${ANCHOR.earLeft.y})`,
-        })
-      : () => ({
-          rotation: -(earAngle + earFlap.value),
-          originX: ANCHOR.earLeft.x,
-          originY: ANCHOR.earLeft.y,
-        }),
+      ? () => {
+          'worklet';
+          return {
+            transform: `rotate(${-(earAngle + earFlap.value)}, ${ANCHOR.earLeft.x}, ${ANCHOR.earLeft.y})`,
+          };
+        }
+      : () => {
+          'worklet';
+          return {
+            rotation: -(earAngle + earFlap.value),
+            originX: ANCHOR.earLeft.x,
+            originY: ANCHOR.earLeft.y,
+          };
+        },
     [earAngle],
   );
   const earRightProps = useAnimatedProps<RigProps>(
     WEB
-      ? () => ({
-          transform: `rotate(${earAngle + earFlap.value}, ${ANCHOR.earRight.x}, ${ANCHOR.earRight.y})`,
-        })
-      : () => ({
-          rotation: earAngle + earFlap.value,
-          originX: ANCHOR.earRight.x,
-          originY: ANCHOR.earRight.y,
-        }),
+      ? () => {
+          'worklet';
+          return {
+            transform: `rotate(${earAngle + earFlap.value}, ${ANCHOR.earRight.x}, ${ANCHOR.earRight.y})`,
+          };
+        }
+      : () => {
+          'worklet';
+          return {
+            rotation: earAngle + earFlap.value,
+            originX: ANCHOR.earRight.x,
+            originY: ANCHOR.earRight.y,
+          };
+        },
     [earAngle],
   );
 
