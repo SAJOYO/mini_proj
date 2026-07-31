@@ -9,9 +9,16 @@ import {
   type ReactNode,
 } from 'react';
 
-import { fetchBlob, savePhoto } from '@/lib/album';
-import { checkResult, ComfyError, POLL_INTERVAL_MS, submit, TIMEOUT_MS } from '@/lib/comfy';
-import { clearPhotoJob, loadPhotoJob, savePhotoJob } from '@/lib/storage';
+import { addPhoto, fetchBlob } from '@/lib/album';
+import {
+  cancel as cancelOnServer,
+  checkResult,
+  ComfyError,
+  POLL_INTERVAL_MS,
+  submit,
+  TIMEOUT_MS,
+} from '@/lib/comfy';
+import { clearPhotoJob, loadPhotoJob, savePhotoJob, type PhotoJob } from '@/lib/storage';
 
 /**
  * 진행 중인 사진 생성 작업을 앱 전체에서 공유합니다.
@@ -24,6 +31,13 @@ import { clearPhotoJob, loadPhotoJob, savePhotoJob } from '@/lib/storage';
  *
  * 그래서 lib/pet.tsx가 캐릭터 상태에 하는 것과 같은 방식으로, 폴링을
  * 화면 밖으로 뺐습니다. 이제 게임을 하다가 완성 배지를 볼 수 있습니다.
+ *
+ * ## 한 번에 한 장만 만듭니다
+ *
+ * 서버의 GPU가 하나라 작업은 어차피 줄을 서서 처리됩니다. 여러 장을 동시에
+ * 밀어넣을 수 있게 해도 빨라지지 않고, 어느 것이 어디까지 갔는지만 복잡해져서
+ * 진행 중인 작업은 하나로 제한합니다. 대신 **만들 수 있는 장수에는 제한이
+ * 없습니다** — 끝나면 다음 장을 시작하면 되고, 전부 앨범에 쌓입니다.
  *
  * ## 웹소켓을 쓰지 않습니다
  *
@@ -41,14 +55,31 @@ import { clearPhotoJob, loadPhotoJob, savePhotoJob } from '@/lib/storage';
 
 export type JobStatus = 'idle' | 'uploading' | 'waiting' | 'saving' | 'done' | 'error';
 
+/** 사진 한 장을 주문할 때 필요한 것. */
+export type PhotoOrder = {
+  breed: string;
+  stage: string;
+  caption: string;
+  /** 사용자가 올린 원본 사진의 로컬 URI. */
+  photoUri: string;
+  /** 생성 프롬프트 (lib/photo-prompt.ts). */
+  prompt: string;
+};
+
 export type PhotoJobState = {
-  /** 어떤 사진에 대한 작업인지 (품종:단계). 없으면 진행 중인 작업이 없습니다. */
-  key: string | null;
+  /**
+   * 지금 만들고 있는 사진의 성장 단계. 없으면 진행 중인 작업이 없습니다.
+   *
+   * 단계로 잡아두는 이유는 화면이 "이 단계 사진을 만드는 중인가?"를 물어보기
+   * 때문입니다. 어느 장인지까지는 구분하지 않아도 됩니다 — 어차피 한 번에
+   * 하나만 돕니다.
+   */
+  stage: string | null;
   status: JobStatus;
   /** 사용자에게 보여줄 실패 사유. status가 error일 때만 채워집니다. */
   error: string | null;
   /**
-   * 완료됐는데 아직 사용자가 확인하지 않은 사진의 키.
+   * 완성됐는데 아직 사용자가 확인하지 않은 사진의 단계.
    *
    * 게임 화면의 배지가 이걸 봅니다. 사진 화면이 열리면 seen()으로 지웁니다.
    */
@@ -57,16 +88,16 @@ export type PhotoJobState = {
 
 type PhotoJobValue = PhotoJobState & {
   /** 사진 한 장을 주문합니다. 결과를 기다리지 않고 바로 돌아옵니다. */
-  start: (input: { key: string; photoUri: string; prompt: string }) => Promise<void>;
+  start: (order: PhotoOrder) => Promise<void>;
   /** 완성 배지를 지웁니다. */
   seen: () => void;
-  /** 진행 중인 작업을 버립니다(서버는 계속 그리지만 결과를 받지 않습니다). */
-  cancel: () => void;
+  /** 진행 중인 작업을 취소합니다. 서버에서 그리던 것도 멈춥니다. */
+  cancel: () => Promise<void>;
 };
 
 const PhotoJobContext = createContext<PhotoJobValue | null>(null);
 
-const IDLE: PhotoJobState = { key: null, status: 'idle', error: null, unseen: null };
+const IDLE: PhotoJobState = { stage: null, status: 'idle', error: null, unseen: null };
 
 export function PhotoJobProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PhotoJobState>(IDLE);
@@ -82,28 +113,27 @@ export function PhotoJobProvider({ children }: { children: ReactNode }) {
   /**
    * 접수증 하나를 끝까지 따라갑니다.
    *
-   * 결과가 나오면 받아서 보관함에 넣는 것까지 여기서 합니다 — 화면이 떠
+   * 결과가 나오면 받아서 앨범에 넣는 것까지 여기서 합니다 — 화면이 떠
    * 있든 말든 사진이 남아야 하니까요.
    */
-  const follow = useCallback(async (key: string, promptId: string, startedAt: number) => {
+  const follow = useCallback(async (job: PhotoJob) => {
+    const { stage, promptId, startedAt } = job;
+
     let cancelled = false;
     stop.current = () => {
       cancelled = true;
     };
 
-    setState({ key, status: 'waiting', error: null, unseen: null });
+    setState({ stage, status: 'waiting', error: null, unseen: null });
+
+    const fail = async (error: string) => {
+      await clearPhotoJob();
+      if (!cancelled) setState({ stage, status: 'error', error, unseen: null });
+    };
 
     while (!cancelled) {
       if (Date.now() - startedAt > TIMEOUT_MS) {
-        await clearPhotoJob();
-        if (!cancelled) {
-          setState({
-            key,
-            status: 'error',
-            error: '사진 만들기가 너무 오래 걸려요. 서버 상태를 확인해 주세요.',
-            unseen: null,
-          });
-        }
+        await fail('사진 만들기가 너무 오래 걸려요. 서버 상태를 확인해 주세요.');
         return;
       }
 
@@ -111,30 +141,31 @@ export function PhotoJobProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (result.state === 'error') {
-        await clearPhotoJob();
-        if (!cancelled) setState({ key, status: 'error', error: result.hint, unseen: null });
+        await fail(result.hint);
         return;
       }
 
       if (result.state === 'done') {
-        setState({ key, status: 'saving', error: null, unseen: null });
+        setState({ stage, status: 'saving', error: null, unseen: null });
 
         // 서버 URL을 그대로 두지 않고 받아 옵니다. 그래야 생성 서버가 꺼져도,
         // 와이파이를 벗어나도 사진이 남습니다.
         const blob = await fetchBlob(result.url);
         if (cancelled) return;
 
-        if (blob) await savePhoto(key, blob);
+        const entry = blob
+          ? await addPhoto(blob, { breed: job.breed, stage, caption: job.caption })
+          : null;
         await clearPhotoJob();
 
         if (!cancelled) {
           setState({
-            key,
+            stage,
             status: 'done',
-            // 받아오지 못했으면 보관도 안 된 상태입니다. 사진 화면이 서버
-            // 주소로라도 보여줄 수 있게 실패를 숨기지 않습니다.
-            error: blob ? null : '사진을 보관하지 못했어요. 서버를 끄면 사라집니다.',
-            unseen: key,
+            // 앨범에 넣지 못했으면 숨기지 않습니다. 사용자가 "만들었는데
+            // 왜 앨범에 없지?"로 헤매는 것보다 낫습니다.
+            error: entry ? null : '사진을 앨범에 넣지 못했어요. 다시 만들어 주세요.',
+            unseen: entry ? stage : null,
           });
         }
         return;
@@ -158,25 +189,25 @@ export function PhotoJobProvider({ children }: { children: ReactNode }) {
         void clearPhotoJob();
         return;
       }
-      void follow(job.key, job.promptId, job.startedAt);
+      void follow(job);
     });
 
     return () => stop.current?.();
   }, [follow]);
 
   const start = useCallback(
-    async ({ key, photoUri, prompt }: { key: string; photoUri: string; prompt: string }) => {
+    async ({ breed, stage, caption, photoUri, prompt }: PhotoOrder) => {
       stop.current?.();
-      setState({ key, status: 'uploading', error: null, unseen: null });
+      setState({ stage, status: 'uploading', error: null, unseen: null });
 
       try {
         const promptId = await submit(photoUri, prompt);
-        const startedAt = Date.now();
-        await savePhotoJob({ key, promptId, startedAt });
-        void follow(key, promptId, startedAt);
+        const job: PhotoJob = { breed, stage, caption, promptId, startedAt: Date.now() };
+        await savePhotoJob(job);
+        void follow(job);
       } catch (e) {
         setState({
-          key,
+          stage,
           status: 'error',
           error:
             e instanceof ComfyError
@@ -193,10 +224,19 @@ export function PhotoJobProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev.unseen ? { ...prev, unseen: null } : prev));
   }, []);
 
-  const cancel = useCallback(() => {
+  /**
+   * 진행 중인 작업을 취소합니다.
+   *
+   * 폴링만 멈추면 GPU는 3분 40초를 마저 씁니다. 그동안 다음 사진을 시작할
+   * 수도 없으니, 서버 쪽 작업도 같이 끊어줘야 취소가 취소다워집니다.
+   */
+  const cancel = useCallback(async () => {
     stop.current?.();
-    void clearPhotoJob();
     setState(IDLE);
+
+    const job = await loadPhotoJob();
+    await clearPhotoJob();
+    if (job) await cancelOnServer(job.promptId);
   }, []);
 
   const value = useMemo<PhotoJobValue>(
@@ -213,7 +253,8 @@ export function usePhotoJob(): PhotoJobValue {
   return value;
 }
 
-/** 지금 이 사진이 만들어지는 중인지. 화면에서 자주 물어보는 질문이라 함수로 둡니다. */
-export function isRunning(state: PhotoJobState, key: string): boolean {
-  return state.key === key && ['uploading', 'waiting', 'saving'].includes(state.status);
+/** 만들고 있는 사진이 있는지. 단계를 주면 그 단계인지까지 봅니다. */
+export function isRunning(state: PhotoJobState, stage?: string): boolean {
+  if (!['uploading', 'waiting', 'saving'].includes(state.status)) return false;
+  return stage === undefined || state.stage === stage;
 }

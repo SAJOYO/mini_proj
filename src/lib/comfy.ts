@@ -270,3 +270,38 @@ export async function checkResult(promptId: string): Promise<CheckResult> {
 
   return { state: 'pending' };
 }
+
+/**
+ * 큐에 넣은 작업을 실제로 취소합니다.
+ *
+ * 두 곳에 요청해야 합니다. 아직 차례가 안 온 작업은 큐에서 빼면 되지만
+ * (`/queue`의 delete), **이미 그리고 있는 작업은 큐에 없어서** 따로
+ * 중단시켜야 합니다(`/interrupt`).
+ *
+ * ⚠️ /interrupt는 **지금 그리는 것**을 멈춥니다. 우리 작업이 아니라 다른
+ * 사람이 돌리는 작업이 실행 중이면 그걸 끊게 됩니다. 이 프로젝트는 팀
+ * 노트북 한 대를 같이 쓰는 상황이라, 취소는 사용자가 직접 누를 때만
+ * 불러야 합니다.
+ *
+ * 실패해도 던지지 않습니다 — 취소가 안 되더라도 앱은 그 결과를 안 받으면
+ * 그만이라, 사용자에게 에러를 보여줄 만한 일이 아닙니다.
+ */
+export async function cancel(promptId: string): Promise<void> {
+  const base = (() => {
+    try {
+      return baseUrl();
+    } catch {
+      return null;
+    }
+  })();
+  if (!base) return;
+
+  await Promise.allSettled([
+    fetch(`${base}/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delete: [promptId] }),
+    }),
+    fetch(`${base}/interrupt`, { method: 'POST' }),
+  ]);
+}

@@ -9,7 +9,7 @@ import { Screen } from '@/components/screen';
 import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { canDownload, downloadBlob, loadPhoto, photoKey } from '@/lib/album';
+import { canDownload, downloadBlob, latestOfStage, loadPhoto } from '@/lib/album';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
 
 /**
@@ -61,14 +61,13 @@ export default function PhotoGenScreen() {
   const stage = resolveStage(params.stage);
   const photoUri = typeof params.photoUri === 'string' && params.photoUri ? params.photoUri : null;
   const prompt = typeof params.prompt === 'string' && params.prompt ? params.prompt : null;
-  const caption = typeof params.caption === 'string' ? params.caption : null;
+  const caption = typeof params.caption === 'string' ? params.caption : '';
 
-  const key = photoKey(breed, stage);
-  const busy = isRunning(job, key);
+  const busy = isRunning(job, stage);
 
+  /** 이 단계에서 마지막으로 만든 사진. 앨범에는 그 전 것들도 남아 있습니다. */
+  const [latest, setLatest] = useState<Blob | null>(null);
   const [result, setResult] = useState<string | null>(null);
-  /** 보관함에서 꺼낸 사진. 내려받기 버튼이 이걸 씁니다. */
-  const [blob, setBlob] = useState<Blob | null>(null);
 
   /**
    * 화면에 띄우려고 만든 blob: URL.
@@ -84,43 +83,46 @@ export default function PhotoGenScreen() {
   }, []);
 
   /**
-   * 보관함에 있는 사진을 꺼내 옵니다.
+   * 이 단계에서 마지막에 만든 사진을 꺼내 옵니다.
    *
    * 화면에 들어올 때 한 번, 그리고 작업이 끝났을 때 한 번 더 봅니다.
-   * (생성 자체는 lib/photo-job.tsx가 하고, 끝나면 보관함에 넣어둡니다)
+   * (생성 자체는 lib/photo-job.tsx가 하고, 끝나면 앨범에 넣어둡니다)
    *
    * 자동으로 새로 만들지는 않습니다 — 한 장에 몇 분씩 걸리고 GPU를 쓰는
    * 일이라 사용자가 눌러서 시작해야 합니다.
    */
   useEffect(() => {
     let alive = true;
-    loadPhoto(key).then((saved) => {
-      if (!alive || !saved) return;
-      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-      objectUrl.current = URL.createObjectURL(saved);
-      setBlob(saved);
-      setResult(objectUrl.current);
-    });
+
+    latestOfStage(stage)
+      .then((entry) => (entry ? loadPhoto(entry.id) : null))
+      .then((blob) => {
+        if (!alive || !blob) return;
+        if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+        objectUrl.current = URL.createObjectURL(blob);
+        setLatest(blob);
+        setResult(objectUrl.current);
+      });
+
     return () => {
       alive = false;
     };
-  }, [key, job.status]);
+  }, [stage, job.status]);
 
   /** 이 화면을 봤으면 게임 화면의 완성 배지는 지웁니다. */
   useEffect(() => {
-    if (job.unseen === key) job.seen();
-  }, [job, key]);
+    if (job.unseen === stage) job.seen();
+  }, [job, stage]);
 
   // 재료가 하나라도 없으면 부를 수가 없습니다. 원인을 나눠서 안내합니다.
   const missing = !photoUri ? '사진' : !prompt ? '프롬프트' : null;
-  // 다른 사진을 만드는 중이면 GPU가 하나뿐이라 줄을 서게 됩니다.
-  const otherBusy = job.key !== null && job.key !== key && isRunning(job, job.key);
-  const error = job.key === key ? job.error : null;
-  const kept = blob !== null;
+  // 다른 단계 사진을 만드는 중이면 GPU가 하나뿐이라 줄을 서게 됩니다.
+  const otherBusy = isRunning(job) && !busy;
+  const error = job.stage === stage ? job.error : null;
 
   function run() {
     if (!photoUri || !prompt) return;
-    void job.start({ key, photoUri, prompt });
+    void job.start({ breed, stage, caption, photoUri, prompt });
   }
 
   /**
@@ -140,7 +142,7 @@ export default function PhotoGenScreen() {
     <Screen>
       <Text style={[styles.title, { color: c.text }]}>사진 만들기</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
-        {caption ?? '함께한 모습을 한 장으로 남겨 드려요.'}
+        {caption || '함께한 모습을 한 장으로 남겨 드려요.'}
       </Text>
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
@@ -200,9 +202,9 @@ export default function PhotoGenScreen() {
 
         {error ? <Text style={[styles.message, { color: c.primary }]}>{error}</Text> : null}
 
-        {kept ? (
+        {latest && !busy ? (
           <Text style={[styles.message, { color: c.textSecondary }]}>
-            이 기기에 보관했어요. 서버를 꺼도 다시 볼 수 있습니다.
+            앨범에 보관했어요. 다시 만들면 이 사진도 앨범에 그대로 남습니다.
           </Text>
         ) : null}
 
@@ -222,22 +224,33 @@ export default function PhotoGenScreen() {
       </ScrollView>
 
       <View style={styles.actions}>
+        {/*
+          "다시 만들기"라고 해서 앞의 사진을 지우지 않습니다. 만들 때마다
+          앨범에 한 장씩 쌓이고, 여기에는 마지막 것이 보입니다.
+        */}
         <Button
-          label={result ? '다시 만들기' : '사진 만들기'}
+          label={result ? '한 장 더 만들기' : '사진 만들기'}
           onPress={run}
           loading={busy}
           disabled={missing !== null || otherBusy}
         />
+        {busy ? (
+          // 취소는 서버에서 그리던 것까지 멈춥니다. 한 번에 한 장만 만들 수
+          // 있어서, 잘못 시작했을 때 3~4분을 기다리지 않아도 되게 합니다.
+          <Button label="취소하기" variant="secondary" onPress={() => void job.cancel()} />
+        ) : (
+          <Button label="앨범 보기" variant="secondary" onPress={() => router.push('/album')} />
+        )}
         {/*
-          보관함과 다운로드는 역할이 다릅니다. 보관함은 앱 안에서 다시 보기
-          위한 것이고 브라우저가 지울 수도 있지만, 내려받은 파일은 사용자
-          것이 됩니다. 그래서 보관에 성공했어도 버튼을 남겨둡니다.
+          앨범과 다운로드는 역할이 다릅니다. 앨범은 앱 안에서 다시 보기 위한
+          것이고 브라우저가 지울 수도 있지만, 내려받은 파일은 사용자 것이
+          됩니다. 그래서 보관에 성공했어도 버튼을 남겨둡니다.
         */}
-        {blob && canDownload() ? (
+        {latest && canDownload() ? (
           <Button
             label="내려받기"
             variant="secondary"
-            onPress={() => downloadBlob(blob, `${breed}-${stage}.png`)}
+            onPress={() => downloadBlob(latest, `${breed}-${stage}.png`)}
             disabled={busy}
           />
         ) : null}

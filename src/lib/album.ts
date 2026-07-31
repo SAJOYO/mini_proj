@@ -14,6 +14,16 @@
  * 수백 MB~GB입니다. 설치할 것도 띄울 것도 없어서 "DB를 만든다"에 해당하지
  * 않습니다.
  *
+ * ## 장수 제한이 없습니다
+ *
+ * 한 단계에 한 장이 아니라 **원하는 만큼** 만들 수 있습니다. 그래서 키를
+ * "품종:단계"로 두지 않습니다 — 그러면 같은 단계에서 다시 만들 때 앞의
+ * 사진을 덮어쓰니까요. 사진마다 고유 id를 주고, 어느 단계에서 찍은
+ * 것인지는 목록(PhotoEntry)이 따로 기억합니다.
+ *
+ * 이미지(무겁다)와 목록(가볍다)을 나눠 둔 것도 같은 이유입니다. 목록은
+ * AsyncStorage에 있어서 앨범 화면이 이미지를 다 읽지 않고도 그릴 수 있습니다.
+ *
  * ## 네이티브에서는 아무 일도 하지 않습니다
  *
  * 이 프로젝트는 웹까지가 범위입니다(README 참고). IndexedDB는 브라우저에만
@@ -21,6 +31,10 @@
  * 빈 값을 돌려줍니다. 사진은 여전히 보입니다 — 서버 URL을 그대로 쓰니까요.
  * 다만 서버를 끄면 사라집니다.
  */
+
+import { loadAlbumEntries, saveAlbumEntries, type PhotoEntry } from '@/lib/storage';
+
+export type { PhotoEntry };
 
 const DB_NAME = 'pet-album';
 const DB_VERSION = 1;
@@ -32,13 +46,13 @@ export function isSupported(): boolean {
 }
 
 /**
- * 사진 한 장을 가리키는 키.
+ * 사진 한 장의 id.
  *
- * 품종과 단계로 만듭니다 — 같은 단계 사진을 다시 만들면 덮어씁니다.
- * (4단계 앨범을 만든다면 이 키 네 개를 훑으면 됩니다)
+ * 시각을 앞에 두어 문자열 순서가 곧 만든 순서가 됩니다. 뒤의 임의 문자는
+ * 같은 밀리초에 두 장이 들어오는 경우를 막습니다.
  */
-export function photoKey(breed: string, stage: string): string {
-  return `${breed}:${stage}`;
+function newPhotoId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -88,21 +102,49 @@ async function withStore<T>(
   }
 }
 
-/** 사진을 보관합니다. 실패해도 조용히 넘어갑니다(돌아온 값이 성공 여부). */
-export async function savePhoto(key: string, blob: Blob): Promise<boolean> {
-  const result = await withStore('readwrite', (store) => store.put(blob, key));
-  return result !== null;
-}
-
 /** 보관된 사진. 없으면 null. */
-export async function loadPhoto(key: string): Promise<Blob | null> {
-  const blob = await withStore<Blob>('readonly', (store) => store.get(key));
+export async function loadPhoto(id: string): Promise<Blob | null> {
+  const blob = await withStore<Blob>('readonly', (store) => store.get(id));
   // 값이 없을 때 IndexedDB는 undefined를 돌려줍니다.
   return blob instanceof Blob ? blob : null;
 }
 
-export async function removePhoto(key: string): Promise<void> {
-  await withStore('readwrite', (store) => store.delete(key));
+/**
+ * 사진 한 장을 앨범에 넣습니다.
+ *
+ * 이미지는 IndexedDB에, 목록 항목은 AsyncStorage에 들어갑니다.
+ * **이미지 저장이 실패하면 목록에 넣지 않습니다** — 목록에만 남으면 앨범에
+ * 빈 칸이 생기고, 그게 왜 비었는지 알 방법이 없습니다.
+ *
+ * 돌아온 값은 새로 만들어진 항목입니다. 실패하면 null.
+ */
+export async function addPhoto(
+  blob: Blob,
+  meta: Omit<PhotoEntry, 'id' | 'createdAt'>,
+): Promise<PhotoEntry | null> {
+  const entry: PhotoEntry = { ...meta, id: newPhotoId(), createdAt: Date.now() };
+
+  const stored = await withStore('readwrite', (store) => store.put(blob, entry.id));
+  if (stored === null) return null;
+
+  await saveAlbumEntries([...(await loadAlbumEntries()), entry]);
+  return entry;
+}
+
+/** 앨범에 있는 사진 목록. 최근에 만든 것이 앞에 옵니다. */
+export async function listPhotos(): Promise<PhotoEntry[]> {
+  return (await loadAlbumEntries()).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** 그 단계에서 가장 최근에 만든 사진. 없으면 null. */
+export async function latestOfStage(stage: string): Promise<PhotoEntry | null> {
+  return (await listPhotos()).find((entry) => entry.stage === stage) ?? null;
+}
+
+/** 사진 한 장을 지웁니다. 이미지와 목록 항목을 함께 지웁니다. */
+export async function removePhoto(id: string): Promise<void> {
+  await withStore('readwrite', (store) => store.delete(id));
+  await saveAlbumEntries((await loadAlbumEntries()).filter((entry) => entry.id !== id));
 }
 
 /**

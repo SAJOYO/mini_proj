@@ -291,7 +291,7 @@ export default function GameScreen() {
 
   const stage = stageOf(pet);
   // 사진은 화면 밖에서 만들어집니다. 여기서는 카메라 버튼 모양만 바꿉니다.
-  const photoBusy = photoJob.key !== null && isRunning(photoJob, photoJob.key);
+  const photoBusy = isRunning(photoJob);
   const photoReady = photoJob.unseen !== null;
   const progress = progressToNext(pet);
   const ending = endingOf(pet);
@@ -349,6 +349,16 @@ export default function GameScreen() {
               {photoBusy ? '만드는 중' : '사진 만들기'}
             </Text>
             {photoReady ? <View style={[styles.photoDot, { backgroundColor: c.primary }]} /> : null}
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/album')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="앨범 보기"
+            style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Text style={styles.photoIcon}>🖼️</Text>
+            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>앨범</Text>
           </Pressable>
         </View>
       </View>
