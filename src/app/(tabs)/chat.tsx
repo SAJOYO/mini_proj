@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -42,7 +42,32 @@ import { loadAnalysis } from '@/lib/storage';
  * 제스처가 서로 잡아먹습니다. 세로 스크롤은 문제없습니다.
  */
 
-type Message = { id: string; role: 'user' | 'assistant'; content: string; failed?: boolean };
+type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  failed?: boolean;
+};
+
+/** 날짜가 바뀌는 지점에만 붙는 구분선 라벨. 같은 날이면 null. */
+function dayLabel(cur: string, prev?: string): string | null {
+  const c = new Date(cur);
+  if (prev && c.toDateString() === new Date(prev).toDateString()) return null;
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (c.toDateString() === today.toDateString()) return '오늘';
+  if (c.toDateString() === yesterday.toDateString()) return '어제';
+  return `${c.getMonth() + 1}월 ${c.getDate()}일`;
+}
+
+/** 말풍선 옆의 시각. 캐릭터는 시계를 모르지만 화면은 보여줍니다. */
+function timeLabel(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  return `${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 /** 대화 설정. 모듈 최상위에서 한 번만 읽습니다. 키가 없으면 null 입니다. */
 const CHAT = chatTarget();
@@ -109,6 +134,7 @@ export default function ChatScreen() {
           id: `db-${m.id}`,
           role: m.role,
           content: m.content,
+          createdAt: m.createdAt,
           failed: m.failed || undefined,
         })),
       );
@@ -155,15 +181,34 @@ export default function ChatScreen() {
       { role: 'user', content: text },
     ];
 
-    setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
+    // 공백 감지용 — 이번 메시지를 붙이기 전의 마지막 시각입니다.
+    // 몇 시간 만의 첫 메시지면 캐릭터가 "어디 갔었어"부터 시작합니다.
+    const lastMessageAt = messages[messages.length - 1]?.createdAt ?? null;
+    const nowIso = new Date().toISOString();
+
+    setMessages((prev) => [
+      ...prev,
+      { id: `u-${prev.length}`, role: 'user', content: text, createdAt: nowIso },
+    ]);
     // 저장은 화면과 별개로 흘러갑니다. 실패해도 대화는 계속됩니다(no-op 폴백).
     void appendMessage(petIdRef.current, { role: 'user', content: text });
 
     try {
-      const answer = await client.reply({ model: CHAT.model, card, name: petName, history });
+      const answer = await client.reply({
+        model: CHAT.model,
+        card,
+        name: petName,
+        history,
+        lastMessageAt,
+      });
       setMessages((prev) => [
         ...prev,
-        { id: `a-${prev.length}`, role: 'assistant', content: answer },
+        {
+          id: `a-${prev.length}`,
+          role: 'assistant',
+          content: answer,
+          createdAt: new Date().toISOString(),
+        },
       ]);
       void appendMessage(petIdRef.current, { role: 'assistant', content: answer });
     } catch (error) {
@@ -177,7 +222,13 @@ export default function ChatScreen() {
       } else {
         setMessages((prev) => [
           ...prev,
-          { id: `a-${prev.length}`, role: 'assistant', content: message, failed: true },
+          {
+            id: `a-${prev.length}`,
+            role: 'assistant',
+            content: message,
+            createdAt: new Date().toISOString(),
+            failed: true,
+          },
         ]);
         void appendMessage(petIdRef.current, {
           role: 'assistant',
@@ -238,37 +289,59 @@ export default function ChatScreen() {
               </View>
             ))}
 
-          {messages.map((m) => {
+          {messages.map((m, i) => {
             // 캐릭터 응답은 맨 앞 지문(*...*)을 떼서 기울임으로 보여줍니다.
             // 별표는 전송 형식일 뿐 화면에 보일 게 아닙니다 (persona-chat/reply.ts).
             const parsed = m.role === 'assistant' && !m.failed ? parseReply(m.content) : null;
+            const divider = dayLabel(m.createdAt, messages[i - 1]?.createdAt);
+            const mine = m.role === 'user';
             return (
-              <View
-                key={m.id}
-                style={[
-                  styles.bubble,
-                  m.role === 'user'
-                    ? [styles.mine, { backgroundColor: c.primary }]
-                    : [
-                        styles.theirs,
-                        { backgroundColor: c.surface, borderColor: m.failed ? c.danger : c.border },
-                      ],
-                ]}>
-                {parsed?.action && (
-                  <Text style={[styles.actionText, { color: c.textSecondary }]}>
-                    {parsed.action}
-                  </Text>
+              <Fragment key={m.id}>
+                {divider && (
+                  <Text style={[styles.dayDivider, { color: c.textSecondary }]}>{divider}</Text>
                 )}
-                {(!parsed || parsed.speech.length > 0) && (
-                  <Text
+                {/* 시각은 말풍선 바깥, 바닥 정렬 — 메신저 관례입니다. */}
+                <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
+                  {mine && (
+                    <Text style={[styles.timeText, { color: c.textSecondary }]}>
+                      {timeLabel(m.createdAt)}
+                    </Text>
+                  )}
+                  <View
                     style={[
-                      styles.bubbleText,
-                      { color: m.role === 'user' ? c.onPrimary : m.failed ? c.danger : c.text },
+                      styles.bubble,
+                      mine
+                        ? [styles.mine, { backgroundColor: c.primary }]
+                        : [
+                            styles.theirs,
+                            {
+                              backgroundColor: c.surface,
+                              borderColor: m.failed ? c.danger : c.border,
+                            },
+                          ],
                     ]}>
-                    {parsed ? parsed.speech : m.content}
-                  </Text>
-                )}
-              </View>
+                    {parsed?.action && (
+                      <Text style={[styles.actionText, { color: c.textSecondary }]}>
+                        {parsed.action}
+                      </Text>
+                    )}
+                    {(!parsed || parsed.speech.length > 0) && (
+                      <Text
+                        style={[
+                          styles.bubbleText,
+                          { color: mine ? c.onPrimary : m.failed ? c.danger : c.text },
+                        ]}>
+                        {parsed ? parsed.speech : m.content}
+                      </Text>
+                    )}
+                  </View>
+                  {!mine && (
+                    <Text style={[styles.timeText, { color: c.textSecondary }]}>
+                      {timeLabel(m.createdAt)}
+                    </Text>
+                  )}
+                </View>
+              </Fragment>
             );
           })}
 
@@ -277,7 +350,8 @@ export default function ChatScreen() {
               style={[
                 styles.bubble,
                 styles.theirs,
-                { backgroundColor: c.surfaceAlt, borderColor: c.border },
+                // 행(row) 밖에 단독으로 놓이는 유일한 말풍선이라 정렬을 직접 줍니다.
+                { alignSelf: 'flex-start', backgroundColor: c.surfaceAlt, borderColor: c.border },
               ]}>
               <Text style={[styles.bubbleText, { color: c.textSecondary }]}>...</Text>
             </View>
@@ -388,6 +462,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     textAlign: 'center',
   },
+  dayDivider: {
+    fontSize: FontSize.caption,
+    textAlign: 'center',
+    marginVertical: Spacing.sm,
+  },
+  bubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+  },
+  bubbleRowMine: {
+    justifyContent: 'flex-end',
+  },
+  timeText: {
+    fontSize: 10,
+    marginBottom: 2,
+  },
   bubble: {
     maxWidth: '78%',
     paddingVertical: Spacing.sm + 2,
@@ -395,12 +486,10 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
   },
   theirs: {
-    alignSelf: 'flex-start',
     borderWidth: 1.5,
     borderBottomLeftRadius: Radius.sm,
   },
   mine: {
-    alignSelf: 'flex-end',
     borderBottomRightRadius: Radius.sm,
   },
   bubbleText: {

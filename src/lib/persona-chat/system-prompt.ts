@@ -241,6 +241,50 @@ export function strategyBlock(card: PersonaCard): string {
  */
 export type PromptBlock = { text: string; cacheable: boolean };
 
+/** 하루를 생활 감각으로 5토막. 전부 받침이 있어 조사는 '이다'로 통일됩니다. */
+function dayPart(now: Date): string {
+  const h = now.getHours();
+  if (h < 5) return '깊은 밤';
+  if (h < 11) return '아침';
+  if (h < 17) return '낮';
+  if (h < 21) return '저녁';
+  return '밤';
+}
+
+/**
+ * 시간 감각 블록 — 매 요청 갱신되므로 cacheable: false.
+ *
+ * ── 시계 숫자를 주지 않습니다 ─────────────────────────
+ * 개는 시계를 못 읽습니다. "오후 3시 42분"을 주면 모델이 시각을 읊는
+ * 조수가 됩니다. 아침/낮/저녁/밤의 생활 감각과 "몇 시간 만"의 경과만
+ * 사실로 주고, 그걸 어떻게 느낄지는 기질이 정합니다 — 애착 높은 애는
+ * 부재를 서운해하고, 혼자 잘 노는 애는 심드렁합니다.
+ *
+ * ── 경과는 공백이 있을 때만 ─────────────────────────
+ * 이어지는 대화(10분 미만)에 "사용자가 돌아왔다"를 매번 넣으면 모델이
+ * 턴마다 재회 인사를 합니다. 공백이 실제로 있었던 첫 응답에만 들어가고,
+ * 그 덕에 오랜만의 첫 마디가 별도 호출 없이 부재 반응이 됩니다.
+ */
+export function nowBlock(now: Date, lastMessageAt?: Date | null): PromptBlock {
+  const lines = ['# 지금', `${dayPart(now)}이다.`];
+
+  if (lastMessageAt) {
+    const mins = (now.getTime() - lastMessageAt.getTime()) / 60_000;
+    if (mins >= 10 && mins < 180) {
+      lines.push('사용자와 조금 전까지 이야기했다.');
+    } else if (mins >= 180 && mins < 24 * 60) {
+      lines.push('사용자가 몇 시간 만에 왔다.');
+    } else if (mins >= 24 * 60 && mins < 48 * 60) {
+      lines.push('사용자가 하루 만에 왔다.');
+    } else if (mins >= 48 * 60) {
+      lines.push(`사용자가 ${Math.floor(mins / (24 * 60))}일 만에 왔다.`);
+    }
+    // 10분 미만이면 아무 말도 안 합니다 — 대화가 그냥 이어지는 중입니다.
+  }
+
+  return { text: lines.join('\n'), cacheable: false };
+}
+
 /**
  * 이 캐릭터의 시스템 프롬프트를 블록으로 돌려줍니다.
  *
