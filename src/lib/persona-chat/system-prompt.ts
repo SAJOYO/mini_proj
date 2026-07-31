@@ -7,6 +7,7 @@ import {
   type PersonaCard,
 } from '@/lib/persona';
 import { ANIMATION_NAMES, BREEDS, type AnimationName } from '@/constants/pet';
+import { pickParticle } from '@/lib/korean';
 import { voiceLines } from '@/lib/persona-chat/voice';
 
 /**
@@ -148,13 +149,6 @@ export const SHARED_RULES = `너는 사용자가 키우는 반려동물이다.
  * 없습니다. 다만 한 단어라 통념 쪽으로 과장되기 쉬워서, 무엇이 실제 기준인지
  * 프롬프트 안에서 못 박아 둡니다.
  */
-/** 받침 유무로 서술격 조사를 고릅니다. "도베르만이다" / "포인터다" */
-function copula(word: string): '이다' | '다' {
-  const code = word.charCodeAt(word.length - 1);
-  if (code < 0xac00 || code > 0xd7a3) return '다';
-  return (code - 0xac00) % 28 === 0 ? '다' : '이다';
-}
-
 const BAND_KO: Record<Band, string> = {
   very_low: '아주 낮음',
   low: '낮음',
@@ -187,7 +181,10 @@ export function characterBlock(card: PersonaCard, name: string): string {
     // "아직 어린"을 앵커에 직접 붙입니다. 공통 규칙의 나이 전제만으로는
     // 무뚝뚝(표현 낮음) 캐릭터가 어른 조언가로 연기됐습니다(실측 2/2).
     `${name} — 아직 어린 ${card.archetype}`,
-    `너는 ${looks}${copula(looks)}.`,
+    // 조사는 받침에 따라 갈립니다("도베르만이다" / "포인터다"). 판정은
+    // lib/korean.ts 가 갖습니다 — 여기에 다시 만들지 마세요. 한때 이 파일에
+    // 같은 계산이 따로 있었습니다.
+    `너는 ${looks}${pickParticle(looks, '이다', '다')}.`,
     '이름은 요약일 뿐이다. 네가 어떤 애인지는 아래 기질이 정한다.',
     '',
     '# 기질',
