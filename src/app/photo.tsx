@@ -10,7 +10,7 @@ import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { pickRandomBreed } from '@/lib/breeds';
-import { notify } from '@/lib/dialog';
+import { confirmAction, notify } from '@/lib/dialog';
 import { usePet } from '@/lib/pet';
 import { clearPhotoUri, loadPhotoUri, savePhotoUri } from '@/lib/storage';
 
@@ -31,7 +31,7 @@ export default function PhotoScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { release } = usePet();
+  const { pet, release } = usePet();
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -93,6 +93,21 @@ export default function PhotoScreen() {
    */
   async function analyze() {
     if (!photoUri) return;
+
+    // 키우는 친구가 남아 있으면 게임 화면이 넘겨받은 품종을 무시합니다
+    // (game.tsx: 이미 캐릭터가 있으면 hatch를 건너뜁니다). 그대로 두면 분석
+    // 결과가 말없이 버려지므로, 여기서 먼저 물어보고 자리를 비웁니다.
+    if (pet) {
+      const ok = await confirmAction({
+        title: '지금 키우는 친구가 있어요',
+        message: '새로 분석하면 지금까지 키운 기록은 사라집니다.',
+        confirmLabel: '새로 시작하기',
+        destructive: true,
+      });
+      if (!ok) return;
+
+      await release();
+    }
 
     setAnalyzing(true);
     try {

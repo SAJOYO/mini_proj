@@ -503,8 +503,14 @@ export default function GameScreen() {
             <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
           </View>
 
+          {/*
+            배율이 기획값(1)이 아닐 때만 경고합니다. 늘 띄워두면 정상 상태에서도
+            빨간 줄이 보여서, 정작 올려둔 채 커밋할 때 눈에 안 들어옵니다.
+          */}
           <Text style={[styles.devNote, { color: c.textSecondary }]}>
-            지금 감소 배율 {GameConfig.decaySpeed}배 · 발표 전 1로 되돌리세요
+            {GameConfig.decaySpeed === 1
+              ? '감소 배율 1배(기획값) · 방치는 위 시연 도구로 확인하세요'
+              : `지금 감소 배율 ${GameConfig.decaySpeed}배 · 커밋 전 1로 되돌리세요`}
           </Text>
         </View>
       )}
