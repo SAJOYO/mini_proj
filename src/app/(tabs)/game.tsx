@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +17,7 @@ import { PetAvatar, type ReactKind } from '@/components/pet-avatar';
 import { PetCharacter } from '@/components/pet-character';
 import { Screen } from '@/components/screen';
 import { StatBar } from '@/components/stat-bar';
-import { BREEDS, resolveBreed } from '@/constants/pet';
+import { BREEDS } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
@@ -46,6 +46,7 @@ import {
 import { objectParticle } from '@/lib/korean';
 import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob } from '@/lib/photo-job';
+import { loadAnalysis } from '@/lib/storage';
 import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
@@ -67,15 +68,27 @@ export default function GameScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const { pet, isLoading, hatch, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
+  const { pet, isLoading, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
     usePet();
   const photoJob = usePhotoJob();
 
-  const params = useLocalSearchParams<{ breed?: string; photoUri?: string }>();
-  // 링크로 들어온 문자열이라 그대로 믿지 않고 아는 품종인지 확인합니다.
-  // 모르는 값이면 기본 형태로 떨어지므로 화면이 깨지지 않습니다.
-  const breedParam = typeof params.breed === 'string' ? resolveBreed(params.breed) : null;
-  const photoParam = typeof params.photoUri === 'string' ? params.photoUri : null;
+  /**
+   * 판정이 남긴 얼굴 관찰. "왜 이 동물인가"를 보여주는 데만 씁니다.
+   *
+   * 게임 규칙에는 안 씁니다 — 캐릭터의 생김새는 `pet.breed` 하나로 정해지고,
+   * 퍼센트(혼합 비율)는 대화 쪽 성격 계산으로만 갑니다.
+   */
+  const [face, setFace] = useState<string>('');
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAnalysis().then((saved) => {
+      if (!cancelled) setFace(saved?.face ?? '');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /** 돌봄 반응 말풍선. 아바타를 움직이게 하는 트리거도 겸합니다. */
   const [reaction, setReaction] = useState<{
@@ -110,18 +123,15 @@ export default function GameScreen() {
    */
   const [activity, setActivity] = useState<CareActionId | null>(null);
 
+  /** 개발용 시연 도구를 펼쳤는지. 발표 화면을 가리지 않게 기본은 접어둡니다. */
+  const [devOpen, setDevOpen] = useState(false);
+
   /** 연달아 쓰다듬은 횟수. 손을 떼면(1.5초) 초기화됩니다. */
   const patStreak = useRef(0);
   const lastPatAt = useRef(0);
 
-  // 넘겨받은 품종으로 캐릭터를 만듭니다. 이미 키우는 중이면 그대로 둡니다.
-  const hatching = useRef(false);
-  useEffect(() => {
-    if (isLoading || pet || !breedParam || hatching.current) return;
-
-    hatching.current = true;
-    void hatch(breedParam, photoParam);
-  }, [isLoading, pet, breedParam, photoParam, hatch]);
+  // 캐릭터는 여기서 만들지 않습니다. 사진 화면이 판정 직후에 hatch() 를 부릅니다.
+  // (탭은 주소 파라미터로 진입하지 않아서, 예전처럼 params 로 품종을 받을 수 없습니다.)
 
   /**
    * 돌봄·쓰다듬기 결과를 화면에 반영합니다.
@@ -233,19 +243,19 @@ export default function GameScreen() {
     router.replace('/photo');
   }
 
-  // 아직 저장소를 읽는 중이거나, 품종을 받아 캐릭터를 만드는 중
-  if (isLoading || (!pet && breedParam)) {
+  // 아직 저장소를 읽는 중
+  if (isLoading) {
     return (
-      <Screen center>
+      <Screen center edges={['top']}>
         <Text style={[styles.loading, { color: c.textSecondary }]}>캐릭터를 준비하는 중...</Text>
       </Screen>
     );
   }
 
-  // 키우는 캐릭터도 없고 품종도 안 넘어왔으면 사진 화면으로 돌려보냅니다
+  // 아직 판정을 안 했으면 사진 화면으로 안내합니다
   if (!pet) {
     return (
-      <Screen center>
+      <Screen center edges={['top']}>
         <Text style={styles.emptyIcon}>🐾</Text>
         <Text style={[styles.emptyTitle, { color: c.text }]}>아직 키우는 친구가 없어요</Text>
         <Text style={[styles.emptyBody, { color: c.textSecondary }]}>
@@ -268,7 +278,7 @@ export default function GameScreen() {
    */
   if (hasDeparted(pet)) {
     return (
-      <Screen center>
+      <Screen center edges={['top']}>
         <Text style={styles.departEmoji}>{DEPARTURE.emoji}</Text>
         <Text style={[styles.departTitle, { color: c.text }]}>{DEPARTURE.title}</Text>
         <Text style={[styles.departBody, { color: c.textSecondary }]}>{DEPARTURE.message}</Text>
@@ -308,7 +318,7 @@ export default function GameScreen() {
   const nickname = user?.nickname ?? '나';
 
   return (
-    <Screen scroll>
+    <Screen scroll edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={[styles.breed, { color: c.text }]}>
@@ -317,6 +327,12 @@ export default function GameScreen() {
             <Text style={{ color: c.primary }}>{BREEDS[pet.breed].label}</Text>
           </Text>
           <Text style={[styles.days, { color: c.textSecondary }]}>함께한 {days + 1}일째</Text>
+          {/* 판정이 이 품종을 고른 이유. 없으면(예전 데이터) 줄 자체가 안 나옵니다. */}
+          {face ? (
+            <Text style={[styles.face, { color: c.textSecondary }]} numberOfLines={2}>
+              {face}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.headerActions}>
           <Pressable onPress={() => void handleRelease()} hitSlop={8}>
@@ -589,46 +605,71 @@ export default function GameScreen() {
       )}
 
       {/*
-        TODO(장유빈·임승현): 대화하기 화면으로 넘어가는 자리입니다.
-        품종과 성장 단계를 넘기면 페르소나를 잡는 데 쓸 수 있습니다.
-          router.push({ pathname: '/chat', params: { breed: pet.breed, stage: stage.id } })
+        대화는 버튼이 아니라 스와이프로 갑니다 — 이 화면과 대화 화면이 탭 형제입니다.
+        (탭 형제로 router.push 를 하면 스택이 쌓여서 뒤로가기가 이상해집니다.)
+        성격은 판정이 남긴 혼합 비율에서 만들어지므로 여기서 넘길 값이 없습니다.
       */}
-      <Button label="대화하기 (준비 중)" variant="secondary" onPress={() => {}} disabled />
+      <Text style={[styles.swipeHint, { color: c.textSecondary }]}>
+        ← 옆으로 밀면 {BREEDS[pet.breed].label}와 대화할 수 있어요
+      </Text>
 
       {__DEV__ && (
         // 개발·발표 시연용. 개발 빌드에서만 보입니다.
         // 시간을 실제로 흘려 기다리지 않고도 성장·방치·엔딩을 확인하려는 목적입니다.
+        //
+        // 기본은 접어둡니다. 발표는 개발 서버로 하기 때문에 이 도구가 그대로
+        // 보이는데, 게임 화면의 절반을 차지해서 정작 보여줄 것을 가립니다.
+        // 그렇다고 지우면 성장·엔딩을 시연할 방법이 없습니다 — 노년기 진입이
+        // 함께한 지 7일, 청년기가 180 EXP 라 실제로 기다릴 수 없습니다.
         <View style={[styles.dev, { borderColor: c.border }]}>
-          <Text style={[styles.devTitle, { color: c.textSecondary }]}>개발용 시연 도구</Text>
+          <Pressable
+            onPress={() => setDevOpen((open) => !open)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: devOpen }}>
+            <Text style={[styles.devTitle, { color: c.textSecondary }]}>
+              개발용 시연 도구 {devOpen ? '▴' : '▾'}
+            </Text>
+          </Pressable>
 
-          <View style={styles.devRow}>
-            <DevButton
-              label="다음 단계 →"
-              onPress={() => void skipStage()}
-              disabled={stage.id === 'elder'}
-            />
-            <DevButton label="영유아기로 ↺" onPress={() => void rewind()} />
-          </View>
+          {devOpen && (
+            <>
+              <View style={styles.devRow}>
+                <DevButton
+                  label="다음 단계 →"
+                  onPress={() => void skipStage()}
+                  disabled={stage.id === 'elder'}
+                />
+                <DevButton label="영유아기로 ↺" onPress={() => void rewind()} />
+              </View>
 
-          <View style={styles.devRow}>
-            <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
-            <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
-            <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
-          </View>
+              <View style={styles.devRow}>
+                <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
+                <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
+                <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
+              </View>
 
-          <View style={styles.devRow}>
-            <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
-          </View>
+              <View style={styles.devRow}>
+                <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
+              </View>
+
+              <Text style={[styles.devNote, { color: c.textSecondary }]}>
+                감소 배율 1배(기획값) · 방치는 위 시연 도구로 확인하세요
+              </Text>
+            </>
+          )}
 
           {/*
-            배율이 기획값(1)이 아닐 때만 경고합니다. 늘 띄워두면 정상 상태에서도
-            빨간 줄이 보여서, 정작 올려둔 채 커밋할 때 눈에 안 들어옵니다.
+            배율 경고는 접어도 보입니다. 접힌 채로 숨기면 올려둔 걸 잊고
+            커밋하게 됩니다 — 경고는 눈에 띄어야 경고입니다.
+            기획값(1)일 때는 안 띄웁니다. 늘 띄우면 정상 상태에서도 빨간 줄이
+            보여서, 정작 올려뒀을 때 눈에 안 들어옵니다.
           */}
-          <Text style={[styles.devNote, { color: c.textSecondary }]}>
-            {GameConfig.decaySpeed === 1
-              ? '감소 배율 1배(기획값) · 방치는 위 시연 도구로 확인하세요'
-              : `지금 감소 배율 ${GameConfig.decaySpeed}배 · 커밋 전 1로 되돌리세요`}
-          </Text>
+          {GameConfig.decaySpeed !== 1 && (
+            <Text style={[styles.devNote, { color: c.danger }]}>
+              지금 감소 배율 {GameConfig.decaySpeed}배 · 커밋 전 1로 되돌리세요
+            </Text>
+          )}
         </View>
       )}
 
@@ -771,6 +812,16 @@ const styles = StyleSheet.create({
   days: {
     fontSize: FontSize.caption,
     marginTop: 2,
+  },
+  face: {
+    fontSize: FontSize.caption,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  swipeHint: {
+    fontSize: FontSize.caption,
+    textAlign: 'center',
+    paddingVertical: Spacing.sm,
   },
   reset: {
     fontSize: FontSize.caption,

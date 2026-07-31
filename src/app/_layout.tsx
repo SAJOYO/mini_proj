@@ -2,6 +2,8 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
@@ -51,25 +53,35 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <PetProvider>
-          {/* 사진 생성은 몇 분이 걸립니다. 화면 밖에서 기다리게 하려고 여기 둡니다. */}
-          <PhotoJobProvider>
-            <ThemeProvider value={isDark ? navDark : navLight}>
-              <StatusBar style={isDark ? 'light' : 'dark'} />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: {
-                    backgroundColor: isDark ? Colors.dark.background : Colors.light.background,
-                  },
-                }}
-              />
-            </ThemeProvider>
-          </PhotoJobProvider>
-        </PetProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    // 제스처(스와이프로 화면 넘기기)를 쓰려면 앱 전체를 이걸로 감싸야 합니다.
+    // 안드로이드에서는 이게 없으면 제스처가 아예 먹지 않습니다.
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <PetProvider>
+            {/* 사진 생성은 몇 분이 걸립니다. 화면 밖에서 기다리게 하려고 여기 둡니다. */}
+            <PhotoJobProvider>
+              <ThemeProvider value={isDark ? navDark : navLight}>
+                <StatusBar style={isDark ? 'light' : 'dark'} />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: {
+                      backgroundColor: isDark ? Colors.dark.background : Colors.light.background,
+                    },
+                  }}
+                />
+              </ThemeProvider>
+            </PhotoJobProvider>
+          </PetProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});

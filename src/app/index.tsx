@@ -14,16 +14,19 @@ const MIN_SPLASH_MS = 1400;
 /**
  * 로딩 화면 (앱 진입점).
  *
- * 로컬에 저장된 로그인 정보와 캐릭터를 읽어보고
- *   - 로그인 + 키우는 캐릭터 있음 → /game
- *   - 로그인만 되어 있음         → /photo
- *   - 로그인 안 됨               → /start
- * 로 보냅니다.
+ * 저장된 로그인 정보를 다 읽고 나서 /start로 보냅니다.
+ * 기존 사용자냐 첫 사용자냐를 갈라 보내는 판단은 /start가 합니다.
+ * (여기서 바로 갈라 보내면 시작 화면을 아예 못 보게 돼서, 되돌아올 방법이 없어집니다.)
+ *
+ * 여기서 isLoading을 기다리는 이유: /start가 user를 보고 버튼 문구와
+ * 다음 화면을 정하기 때문에, 읽기가 끝난 뒤에 넘겨야 화면이 깜빡이지 않습니다.
  */
 export default function LoadingScreen() {
   const c = useTheme();
-  const { user, isLoading } = useAuth();
-  const { pet, isLoading: petLoading } = usePet();
+  const { isLoading } = useAuth();
+  // 펫 읽기도 같이 기다립니다. /start 가 "펫이 있으면 게임으로" 를 판단하는데,
+  // 아직 읽는 중이면 잠깐 "시작하기" 로 보였다가 "이어서 키우기" 로 바뀝니다.
+  const { isLoading: petLoading } = usePet();
   const [minTimePassed, setMinTimePassed] = useState(false);
 
   // useState의 지연 초기화로 Animated.Value를 딱 한 번만 만듭니다.
@@ -59,8 +62,6 @@ export default function LoadingScreen() {
 
   const ready = !isLoading && !petLoading && minTimePassed;
   if (ready) {
-    // 이미 키우는 캐릭터가 있으면 사진 화면을 건너뛰고 바로 게임으로
-    if (user) return <Redirect href={pet ? '/game' : '/photo'} />;
     return <Redirect href="/start" />;
   }
 

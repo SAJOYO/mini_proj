@@ -10,6 +10,7 @@ import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { canDownload, downloadBlob, latestOfStage, loadPhoto } from '@/lib/album';
+import { survivesReload } from '@/lib/image';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
 
 /**
@@ -59,7 +60,9 @@ export default function PhotoGenScreen() {
   // 링크로 들어온 문자열이라 그대로 믿지 않고 아는 값인지 확인합니다.
   const breed = resolveBreed(params.breed);
   const stage = resolveStage(params.stage);
-  const photoUri = typeof params.photoUri === 'string' && params.photoUri ? params.photoUri : null;
+  // 웹에서 새로고침하면 blob: URI는 문자열만 남고 가리키는 데이터가 사라집니다.
+  // 그대로 쓰면 깨진 칸이 뜨고 업로드도 실패하므로 아예 "사진 없음"으로 봅니다.
+  const photoUri = survivesReload(params.photoUri) ? (params.photoUri as string) : null;
   const prompt = typeof params.prompt === 'string' && params.prompt ? params.prompt : null;
   const caption = typeof params.caption === 'string' ? params.caption : '';
 

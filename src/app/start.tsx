@@ -1,19 +1,46 @@
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
+
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth';
+import { usePet } from '@/lib/pet';
 
 /**
  * 시작 화면.
  *
- * 앱 소개 + [시작하기] 버튼 하나. 누르면 로그인으로 넘어갑니다.
+ * 버튼은 하나지만 누른 사람이 어디까지 해봤는지에 따라 목적지가 달라집니다.
+ *
+ *   저장된 닉네임 없음        → /login   (첫 사용자: 로그인 → 사진 → 게임)
+ *   닉네임 있고 캐릭터 없음   → /photo   (중간에 그만둔 사람: 남은 단계만)
+ *   닉네임·캐릭터 둘 다 있음  → /game    (기존 사용자: 곧바로 게임)
+ *
+ * "사진"이 아니라 "캐릭터"가 기준입니다. 사진만 골라두고 분석을 안 했으면
+ * 게임에 띄울 것이 없습니다.
  */
 export default function StartScreen() {
   const c = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
+
+  const { pet, isLoading } = usePet();
+
+  const checking = isLoading;
+  const returning = user !== null && pet !== null;
+
+  // '/game'은 src/app/(tabs)/game.tsx 입니다.
+  // 괄호로 묶은 폴더((tabs))는 주소에 나타나지 않습니다.
+  const destination: Href = user === null ? '/login' : pet ? '/game' : '/photo';
+
+  function handleStart() {
+    if (checking) return;
+    // replace를 쓰는 이유: 시작 화면으로 뒤로가기할 일이 없습니다.
+    // (게임 화면에서 뒤로 눌렀다가 다시 시작 화면이 나오면 어색합니다.)
+    router.replace(destination);
+  }
 
   return (
     <Screen>
@@ -22,17 +49,32 @@ export default function StartScreen() {
           <Text style={styles.mascotFace}>🐶</Text>
         </View>
 
-        <Text style={[styles.title, { color: c.text }]}>나를 닮은{'\n'}반려동물 키우기</Text>
-
-        <Text style={[styles.description, { color: c.textSecondary }]}>
-          사진 한 장이면 나와 닮은 동물을 찾아드려요.{'\n'}그 아이를 캐릭터로 만들어 함께 키우고,
-          {'\n'}
-          말도 걸어보세요.
-        </Text>
+        {returning ? (
+          <>
+            <Text style={[styles.title, { color: c.text }]}>
+              다시 만나서{'\n'}반가워요, {user.nickname}님
+            </Text>
+            <Text style={[styles.description, { color: c.textSecondary }]}>
+              기다리던 아이가 있어요.{'\n'}이어서 키워볼까요?
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.title, { color: c.text }]}>나를 닮은{'\n'}반려동물 키우기</Text>
+            <Text style={[styles.description, { color: c.textSecondary }]}>
+              사진 한 장이면 나와 닮은 동물을 찾아드려요.{'\n'}그 아이를 캐릭터로 만들어 함께
+              키우고,{'\n'}말도 걸어보세요.
+            </Text>
+          </>
+        )}
       </View>
 
       <View style={styles.actions}>
-        <Button label="시작하기" onPress={() => router.push('/login')} />
+        <Button
+          label={returning ? '이어서 키우기' : '시작하기'}
+          onPress={handleStart}
+          loading={checking}
+        />
         <Text style={[styles.caption, { color: c.textSecondary }]}>
           로그인 정보는 이 기기에만 저장됩니다.
         </Text>
