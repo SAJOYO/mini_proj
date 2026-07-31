@@ -52,6 +52,15 @@ export function mimeTypeOf(uri: string): VisionImageInput['mimeType'] {
  *      (피커가 준 base64 는 메모리에만 있어서 새로고침하면 없습니다)
  *
  * 네이티브에서는 `file://` 경로라 그대로 살아 있습니다. 그래서 형태로 가릅니다.
+ *
+ * ⚠️ **"지금 읽을 수 있는가"를 묻는 함수가 아닙니다.** 방금 고른 blob: 은
+ *    살아 있어도 여기서 false 가 됩니다. 화면에 띄울 수 있는지 알고 싶다면
+ *    형태로 가르지 말고 실제로 한 번 읽어보세요 — photo-gen.tsx 가 그렇게 합니다.
+ *    (이 둘을 같은 것으로 봐서 "올린 사진이 사진 없음으로 뜨는" 버그가 났었습니다)
+ *
+ *    이 함수는 **저장소에서 복원할 값**을 거를 때만 씁니다. 그 경우에는
+ *    앱을 다시 띄운 뒤라 blob: 이 이미 죽어 있고, 피커가 준 base64 도 없어서
+ *    판정에도 쓸 수 없기 때문입니다.
  */
 export function survivesReload(uri: string | null | undefined): boolean {
   if (!uri) return false;
