@@ -195,26 +195,29 @@ export default function PhotoScreen() {
 
       <Text style={[styles.title, { color: c.text }]}>얼굴이 잘 보이는{'\n'}사진을 올려주세요</Text>
 
-      <Pressable
-        onPress={photoUri ? undefined : pickFromLibrary}
-        disabled={busy}
-        style={[
-          styles.slot,
-          {
-            backgroundColor: c.surfaceAlt,
-            borderColor: c.border,
-            borderStyle: photoUri ? 'solid' : 'dashed',
-          },
-        ]}>
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.preview} contentFit="cover" />
-        ) : (
-          <View style={styles.slotEmpty}>
-            <Text style={styles.slotIcon}>📷</Text>
-            <Text style={[styles.slotHint, { color: c.textSecondary }]}>눌러서 사진 고르기</Text>
-          </View>
-        )}
-      </Pressable>
+      {/* 남는 세로 공간을 이 칸이 다 먹지 않게, 가운데에 정사각형으로 띄웁니다. */}
+      <View style={styles.slotArea}>
+        <Pressable
+          onPress={photoUri ? undefined : pickFromLibrary}
+          disabled={busy}
+          style={[
+            styles.slot,
+            {
+              backgroundColor: c.surfaceAlt,
+              borderColor: c.border,
+              borderStyle: photoUri ? 'solid' : 'dashed',
+            },
+          ]}>
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={styles.preview} contentFit="cover" />
+          ) : (
+            <View style={styles.slotEmpty}>
+              <Text style={styles.slotIcon}>📷</Text>
+              <Text style={[styles.slotHint, { color: c.textSecondary }]}>눌러서 사진 고르기</Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
 
       <View style={styles.actions}>
         {photoUri ? (
@@ -271,14 +274,23 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     marginBottom: Spacing.lg,
   },
-  slot: {
+  slotArea: {
     flex: 1,
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  slot: {
+    // 피커가 1:1 로 잘라주므로 칸도 정사각형입니다. 화면이 세로로 길어도
+    // 사진이 같이 커지지 않게 위쪽 한계를 둡니다.
+    width: '100%',
+    maxWidth: 260,
+    aspectRatio: 1,
+    alignSelf: 'center',
     borderWidth: 2,
     borderRadius: Radius.lg,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.lg,
   },
   slotEmpty: {
     alignItems: 'center',
