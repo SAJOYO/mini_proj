@@ -6,6 +6,7 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
+import { usePet } from '@/lib/pet';
 
 /** 저장소를 아무리 빨리 읽어도 이 시간만큼은 로딩 화면을 보여줍니다(깜빡임 방지). */
 const MIN_SPLASH_MS = 1400;
@@ -23,6 +24,9 @@ const MIN_SPLASH_MS = 1400;
 export default function LoadingScreen() {
   const c = useTheme();
   const { isLoading } = useAuth();
+  // 펫 읽기도 같이 기다립니다. /start 가 "펫이 있으면 게임으로" 를 판단하는데,
+  // 아직 읽는 중이면 잠깐 "시작하기" 로 보였다가 "이어서 키우기" 로 바뀝니다.
+  const { isLoading: petLoading } = usePet();
   const [minTimePassed, setMinTimePassed] = useState(false);
 
   // useState의 지연 초기화로 Animated.Value를 딱 한 번만 만듭니다.
@@ -56,7 +60,7 @@ export default function LoadingScreen() {
     return () => loop.stop();
   }, [bounce]);
 
-  const ready = !isLoading && minTimePassed;
+  const ready = !isLoading && !petLoading && minTimePassed;
   if (ready) {
     return <Redirect href="/start" />;
   }

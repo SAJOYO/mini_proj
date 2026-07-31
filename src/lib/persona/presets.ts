@@ -70,6 +70,9 @@ export const BREED_AXES: Record<BreedId, Partial<Axes>> = {
   // 애착 낮음 · 표현 낮음 — 뛸 때만 폭발하고 평소엔 조용합니다
   greyhound: { attachment: 40, expression: 22, sensitivity: 65, curiosity: 45, optimism: 60 },
 
+  // 사람과 짝을 이뤄 일하던 개. 활동적이고 웬만해선 안 흔들립니다
+  pointer: { attachment: 72, expression: 60, sensitivity: 22, curiosity: 92, optimism: 75 },
+
   // ── 아래 셋은 초안입니다 ──────────────────────────────────
   // TODO(장유빈·임승현): 게임 파트가 가진 품종에 맞추려고 제가(홍가연) 넣은
   // 값입니다. 성격 수치는 두 분 영역이니 검토하고 고쳐주세요.

@@ -1,5 +1,5 @@
 import { useRouter, type Href } from 'expo-router';
-import { useEffect, useState } from 'react';
+
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -7,7 +7,7 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { loadPhotoUri } from '@/lib/storage';
+import { usePet } from '@/lib/pet';
 
 /**
  * 시작 화면.
@@ -15,36 +15,25 @@ import { loadPhotoUri } from '@/lib/storage';
  * 버튼은 하나지만 누른 사람이 어디까지 해봤는지에 따라 목적지가 달라집니다.
  *
  *   저장된 닉네임 없음        → /login   (첫 사용자: 로그인 → 사진 → 게임)
- *   닉네임 있고 사진 없음     → /photo   (중간에 그만둔 사람: 남은 단계만)
- *   닉네임·사진 둘 다 있음    → /game    (기존 사용자: 곧바로 게임)
+ *   닉네임 있고 캐릭터 없음   → /photo   (중간에 그만둔 사람: 남은 단계만)
+ *   닉네임·캐릭터 둘 다 있음  → /game    (기존 사용자: 곧바로 게임)
  *
- * "사진을 넣었는가"를 기준으로 삼은 이유: 사진이 있어야 캐릭터가 생기고,
- * 캐릭터가 있어야 게임 화면이 의미가 있습니다.
+ * "사진"이 아니라 "캐릭터"가 기준입니다. 사진만 골라두고 분석을 안 했으면
+ * 게임에 띄울 것이 없습니다.
  */
 export default function StartScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user } = useAuth();
 
-  // null = 아직 저장소를 읽는 중
-  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null);
+  const { pet, isLoading } = usePet();
 
-  useEffect(() => {
-    let cancelled = false;
-    loadPhotoUri().then((uri) => {
-      if (!cancelled) setHasPhoto(uri !== null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const checking = hasPhoto === null;
-  const returning = user !== null && hasPhoto === true;
+  const checking = isLoading;
+  const returning = user !== null && pet !== null;
 
   // '/game'은 src/app/(tabs)/game.tsx 입니다.
   // 괄호로 묶은 폴더((tabs))는 주소에 나타나지 않습니다.
-  const destination: Href = user === null ? '/login' : hasPhoto ? '/game' : '/photo';
+  const destination: Href = user === null ? '/login' : pet ? '/game' : '/photo';
 
   function handleStart() {
     if (checking) return;

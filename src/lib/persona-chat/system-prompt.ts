@@ -41,6 +41,9 @@ const KNOWN_TOPICS: Record<AnimationName, string> = {
   yawn: '졸린 것',
   sleep: '자는 것',
   wagTail: '기분이 좋은 것',
+  // 게임에서 아바타를 누르면 재생되는 동작입니다. 돌봄과 달리 사용자가
+  // 아무 이유 없이 해주는 것이라, 캐릭터에게는 "예뻐해줬다"에 가깝습니다.
+  wagSlow: '쓰다듬어주는 것',
   droop: '아프거나 기운이 없는 것',
 };
 

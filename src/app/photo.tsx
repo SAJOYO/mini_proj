@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Screen } from '@/components/screen';
@@ -11,7 +11,10 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { toVisionImage } from '@/lib/image';
 import { visionTarget } from '@/lib/llm/config';
+import { confirmAction, notify } from '@/lib/dialog';
+import { usePet } from '@/lib/pet';
 import { createCharacterFromPhoto } from '@/lib/pipeline';
+import { dominantBreed, resolveMix } from '@/lib/persona';
 import { clearPhotoUri, loadPhotoUri, saveAnalysis, savePhotoUri } from '@/lib/storage';
 
 const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
@@ -37,6 +40,7 @@ export default function PhotoScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { pet, hatch, release } = usePet();
 
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   // 피커가 준 base64. 저장소에는 넣지 않습니다(사진 한 장이 수 MB).
@@ -61,20 +65,39 @@ export default function PhotoScreen() {
   }
 
   /**
-   * 사진으로 캐릭터를 만들고 게임 화면으로 넘어갑니다.
+   * 사진 → 판정 → 캐릭터 → 게임 화면.
    *
-   * 결과는 저장해두고 다시 부르지 않습니다. 무료 티어가 하루 20건 남짓이라
-   * 화면을 드나들 때마다 호출하면 금방 막힙니다.
+   * 한 번에 세 곳으로 갈라집니다.
+   *   mix 전체   저장소(@pet/analysis) → 대화가 읽어서 성격을 만듭니다
+   *   1순위 품종  hatch() → 게임 캐릭터의 생김새
+   *   face       저장소 → 게임 화면이 "왜 이 동물인가"를 보여줍니다
+   *
+   * 결과는 저장해두고 다시 부르지 않습니다. 무료 한도가 빠듯해서 화면을
+   * 드나들 때마다 호출하면 금방 막힙니다.
    */
   async function analyze() {
     if (!photoUri || analyzing) return;
 
     if (!VISION) {
-      Alert.alert(
+      notify(
         'API 키가 설정되지 않았어요',
         '.env 파일에 EXPO_PUBLIC_VISION_API_KEY 와 EXPO_PUBLIC_VISION_MODEL 을 넣고 앱을 다시 시작해 주세요. (.env.example 참고)',
       );
       return;
+    }
+
+    // 키우던 친구가 있으면 먼저 물어봅니다. 새 판정 결과로 캐릭터를 다시 만들면
+    // 지금까지 키운 기록이 사라지기 때문입니다.
+    if (pet) {
+      const ok = await confirmAction({
+        title: '지금 키우는 친구가 있어요',
+        message: '새로 분석하면 지금까지 키운 기록은 사라집니다.',
+        confirmLabel: '새로 시작하기',
+        destructive: true,
+      });
+      if (!ok) return;
+
+      await release();
     }
 
     setAnalyzing(true);
@@ -89,12 +112,15 @@ export default function PhotoScreen() {
         createdAt: new Date().toISOString(),
       });
 
+      // 겉모습은 1순위 품종으로 그립니다. 퍼센트는 성격(대화)에만 쓰입니다.
+      await hatch(dominantBreed(resolveMix(inference.mix)), photoUri);
+
       router.replace('/game');
     } catch (error) {
       // 무엇이 잘못됐는지 보여줍니다. "실패했어요"만 띄우면 키 문제인지
       // 네트워크인지 모델이 이상한 걸 뱉은 건지 알 수가 없습니다.
       const reason = error instanceof Error ? error.message : String(error);
-      Alert.alert('분석에 실패했어요', reason);
+      notify('분석에 실패했어요', reason);
     } finally {
       setAnalyzing(false);
     }
@@ -105,7 +131,7 @@ export default function PhotoScreen() {
     try {
       await applyResult(await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS));
     } catch {
-      Alert.alert('사진을 불러오지 못했어요', '잠시 후 다시 시도해 주세요.');
+      notify('사진을 불러오지 못했어요', '잠시 후 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -116,12 +142,12 @@ export default function PhotoScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('카메라 권한이 필요해요', '설정에서 카메라 접근을 허용해 주세요.');
+        notify('카메라 권한이 필요해요', '설정에서 카메라 접근을 허용해 주세요.');
         return;
       }
       await applyResult(await ImagePicker.launchCameraAsync(PICKER_OPTIONS));
     } catch {
-      Alert.alert('카메라를 열지 못했어요', '잠시 후 다시 시도해 주세요.');
+      notify('카메라를 열지 못했어요', '잠시 후 다시 시도해 주세요.');
     } finally {
       setBusy(false);
     }
@@ -134,6 +160,8 @@ export default function PhotoScreen() {
   }
 
   async function handleSignOut() {
+    // 캐릭터도 함께 정리합니다 (다른 사람이 이어받는 상황을 막기 위해)
+    await release();
     await signOut();
     router.replace('/start');
   }
@@ -175,17 +203,7 @@ export default function PhotoScreen() {
       <View style={styles.actions}>
         {photoUri ? (
           <>
-            {/*
-              TODO(홍가연): 판정 결과를 보여주는 화면이 여기와 게임 사이에 들어갑니다.
-              지금은 판정만 하고 곧바로 게임으로 넘어갑니다. 결과는 저장돼 있으니
-              (`loadAnalysis()`) 결과 화면을 만들 때 다시 부를 필요 없습니다.
-            */}
-            <Button
-              label={analyzing ? '' : '분석하고 시작하기'}
-              onPress={analyze}
-              loading={analyzing}
-              disabled={busy}
-            />
+            <Button label="분석하기" onPress={analyze} loading={analyzing} disabled={busy} />
             <Button
               label="다시 고르기"
               variant="secondary"

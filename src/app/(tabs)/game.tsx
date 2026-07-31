@@ -1,229 +1,1091 @@
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ActivityBar } from '@/components/activity-bar';
+import { Button } from '@/components/button';
+import { GrowthOverlay } from '@/components/growth-overlay';
+import { PetAvatar, type ReactKind } from '@/components/pet-avatar';
+import { PetCharacter } from '@/components/pet-character';
 import { Screen } from '@/components/screen';
+import { StatBar } from '@/components/stat-bar';
 import { BREEDS } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { DEFAULT_MIX, dominantBreed, resolveMix, synthesize } from '@/lib/persona';
-import { loadAnalysis, loadPhotoUri, type StoredAnalysis } from '@/lib/storage';
+import { confirmAction } from '@/lib/dialog';
+import {
+  CARE_ACTIONS,
+  daysTogether,
+  DEPARTURE,
+  departureSecondsLeft,
+  endingOf,
+  GameConfig,
+  hasDeparted,
+  isCareOpen,
+  isPackingBags,
+  patStreakReaction,
+  progressToNext,
+  sideEffectHint,
+  STATS,
+  stageOf,
+  wishOf,
+  wishSecondsLeft,
+  type CareActionId,
+  type CareResult,
+  type Stage,
+} from '@/lib/game';
+import { objectParticle } from '@/lib/korean';
+import { usePet } from '@/lib/pet';
+import { loadAnalysis } from '@/lib/storage';
+import { buildKeepsakePrompt } from '@/lib/photo-prompt';
+
+/** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
+const SAD_BELOW = 25;
+
+/** 이 간격 안에 다시 쓰다듬으면 "연달아 쓰다듬는 중"으로 봅니다. */
+const PAT_STREAK_WINDOW_MS = 1500;
 
 /**
- * 다마고치 게임 화면 (왼쪽 페이지).
+ * 다마고치 게임 화면.
  *
- * TODO(조윤주, 최윤우): 여기가 게임 담당 화면입니다.
- *   지금 들어 있는 건 자리만 잡아둔 껍데기이니 마음대로 갈아엎으세요.
+ * 사진 화면에서 품종을 넘겨받아 캐릭터를 만들고, 돌보면서 4단계로 키웁니다.
+ * 규칙(경험치·스탯 감소·단계 판정)은 전부 lib/game.ts에 있습니다.
  *
- *   판정 결과를 읽는 법은 아래 useEffect 를 그대로 쓰시면 됩니다.
- *     mix          품종 혼합 비율. dominantBreed(mix) 가 1순위 품종 id 입니다.
- *     card         성격 카드. card.archetype, card.axes 등
- *     analysis.face      얼굴 관찰 문장
- *     analysis.reasons   품종별 근거 문장 (breedId 로 찾습니다)
- *
- *   품종 id 는 BREEDS 의 키(corgi, shiba, jindo ...)이고,
- *   캐릭터 그림을 그 id 로 매핑하시면 됩니다. 판정은 이 16종 밖으로 나가지 않습니다
- *   (스키마 enum 으로 막아뒀습니다).
- *
- *   - 캐릭터 자리에는 아직 사용자 사진이 임시로 들어갑니다.
- *   - 상태 바(배고픔/행복도)는 지금 하드코딩된 숫자입니다.
- *   - 화면 아래 여백은 점 인디케이터 자리라 남겨두는 게 좋습니다.
- *
- * 주의: `edges={['top']}` 입니다. 아래쪽 안전영역은 탭 레이아웃의 점 인디케이터가
- * 이미 처리하므로 여기서 또 넣으면 여백이 두 번 들어갑니다.
+ * 캐릭터 이미지는 아직 없어서 단계별 이모지로 대신하고 있습니다.
+ * → components/pet-avatar.tsx 의 TODO(조윤주) 참고
  */
 export default function GameScreen() {
   const c = useTheme();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const { pet, isLoading, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
+    usePet();
 
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<StoredAnalysis | null>(null);
+  /**
+   * 판정이 남긴 얼굴 관찰. "왜 이 동물인가"를 보여주는 데만 씁니다.
+   *
+   * 게임 규칙에는 안 씁니다 — 캐릭터의 생김새는 `pet.breed` 하나로 정해지고,
+   * 퍼센트(혼합 비율)는 대화 쪽 성격 계산으로만 갑니다.
+   */
+  const [face, setFace] = useState<string>('');
 
   useEffect(() => {
     let cancelled = false;
-    loadPhotoUri().then((uri) => {
-      if (!cancelled) setPhotoUri(uri);
-    });
     loadAnalysis().then((saved) => {
-      if (!cancelled) setAnalysis(saved);
+      if (!cancelled) setFace(saved?.face ?? '');
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // 판정 전이면 중립으로 떨어집니다. 사진을 안 올렸다고 화면이 죽지 않게.
-  const mix = useMemo(() => (analysis ? resolveMix(analysis.mix) : DEFAULT_MIX), [analysis]);
-  const card = useMemo(() => synthesize(mix), [mix]);
-  const breed = dominantBreed(mix);
-  const petName = BREEDS[breed].label;
+  /** 돌봄 반응 말풍선. 아바타를 움직이게 하는 트리거도 겸합니다. */
+  const [reaction, setReaction] = useState<{
+    key: number;
+    text: string;
+    kind: ReactKind;
+    /** 떠오를 파티클 이모지. 거절이면 null. */
+    emoji: string | null;
+  } | null>(null);
+  const reactionSeq = useRef(0);
 
-  async function handleSignOut() {
-    await signOut();
-    router.replace('/start');
+  /** 성장 축하 연출. 성장한 순간에만 채워집니다. */
+  const [grewInto, setGrewInto] = useState<Stage | null>(null);
+
+  /**
+   * 방금 떠나온 단계. 성장 연출이 끝난 뒤 "기념 사진 남길까요?"를 띄우는 데 씁니다.
+   *
+   * 축하 연출 안에 질문을 넣지 않은 이유 — GrowthOverlay는 pointerEvents="none"에
+   * 1.5초 뒤 스스로 사라집니다. 조작을 막지 않으려고 그렇게 만든 것이라, 거기에
+   * 예/아니오를 넣으면 성격이 정반대가 됩니다. 축하는 그대로 흘려보내고,
+   * 사라진 자리에 남는 카드로 물어봅니다 — 2초 안에 결정하라고 몰지 않습니다.
+   */
+  const [keepsakeOf, setKeepsakeOf] = useState<Stage | null>(null);
+
+  /**
+   * 진행 중인 돌봄. 버튼을 누르면 곧바로 끝나지 않고 여기에 들어가고,
+   * 진행 바가 다 차면 실제로 적용됩니다.
+   *
+   * 저장하지 않는 화면 상태입니다 — 앱을 닫으면 진행은 사라집니다. 진행 중인
+   * 것까지 저장하면 "껐다 켰더니 밥을 먹고 있다"를 다뤄야 해서, 미니 프로젝트
+   * 범위에서는 화면 안에서만 살게 두었습니다.
+   */
+  const [activity, setActivity] = useState<CareActionId | null>(null);
+
+  /** 연달아 쓰다듬은 횟수. 손을 떼면(1.5초) 초기화됩니다. */
+  const patStreak = useRef(0);
+  const lastPatAt = useRef(0);
+
+  // 캐릭터는 여기서 만들지 않습니다. 사진 화면이 판정 직후에 hatch() 를 부릅니다.
+  // (탭은 주소 파라미터로 진입하지 않아서, 예전처럼 params 로 품종을 받을 수 없습니다.)
+
+  /**
+   * 돌봄·쓰다듬기 결과를 화면에 반영합니다.
+   *
+   * 성공과 거절을 **다르게** 보여주는 게 핵심입니다. 예전에는 둘 다 똑같이
+   * 튀어올라서, 스탯이 가득 차 거절당한 것인지 잘 먹은 것인지 구분되지 않았습니다.
+   * (알림 창을 쓰지 않는 이유는 웹에서 Alert가 동작하지 않기 때문 — lib/dialog.ts 참고)
+   */
+  function showResult(result: CareResult, kind: 'care' | 'pat', emoji: string) {
+    reactionSeq.current += 1;
+
+    setReaction({
+      key: reactionSeq.current,
+      text: result.message,
+      kind: result.applied ? kind : 'refused',
+      // 거절이면 파티클을 띄우지 않습니다 — 아무 일도 일어나지 않았으니까요.
+      emoji: result.applied ? emoji : null,
+    });
+
+    // 성장은 말풍선 한 줄로 지나가면 아까워서 별도 연출로 띄웁니다.
+    if (result.grewInto) setGrewInto(result.grewInto);
+    // 떠나온 모습은 지금이 아니면 다시 볼 수 없습니다. 연출이 끝나면 물어봅니다.
+    if (result.grewFrom) setKeepsakeOf(result.grewFrom);
   }
 
-  return (
-    <Screen edges={['top']}>
-      <View style={styles.header}>
-        <Text style={[styles.greeting, { color: c.text }]}>
-          <Text style={{ color: c.primary }}>{user?.nickname ?? '친구'}</Text>님의 반려동물
-        </Text>
-        <Pressable onPress={handleSignOut} hitSlop={8}>
-          <Text style={[styles.signOut, { color: c.textSecondary }]}>로그아웃</Text>
-        </Pressable>
-      </View>
+  /**
+   * 돌봄을 시작합니다. 실제 적용은 진행 바가 끝날 때(finishCare)입니다.
+   *
+   * 진행 중에 다른 돌봄을 시작할 수 없게 막는 것이 연타 방지 역할을 겸합니다
+   * (쿨다운을 따로 두지 않은 이유 — components/activity-bar.tsx 참고).
+   */
+  function startCare(actionId: CareActionId) {
+    if (activity) return;
+    setActivity(actionId);
+  }
 
-      <View style={styles.stage}>
-        <View style={[styles.pet, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.petImage} contentFit="cover" />
-          ) : (
-            <Text style={styles.petFace}>🐶</Text>
-          )}
+  async function finishCare(actionId: CareActionId) {
+    setActivity(null);
+
+    const result = await care(actionId);
+    if (!result) return;
+
+    const action = CARE_ACTIONS.find((a) => a.id === actionId);
+    showResult(result, 'care', action?.emoji ?? '✨');
+  }
+
+  /**
+   * 쓰다듬기. 횟수 제한이 없어서 돌봄이 진행 중이어도 누를 수 있습니다.
+   * 연달아 누르면 반응이 점점 커집니다(patStreakReaction).
+   */
+  async function handlePat() {
+    const now = Date.now();
+    patStreak.current = now - lastPatAt.current < PAT_STREAK_WINDOW_MS ? patStreak.current + 1 : 1;
+    lastPatAt.current = now;
+
+    const result = await pat();
+    if (!result) return;
+
+    const streakText = patStreakReaction(patStreak.current);
+    showResult(streakText ? { ...result, message: streakText } : result, 'pat', '💗');
+  }
+
+  /**
+   * 방금 떠나온 모습으로 기념 사진을 만들러 갑니다.
+   *
+   * 넘기는 건 네 가지입니다 — 품종, **떠나온** 단계, 사용자가 올린 사진,
+   * 그리고 그 둘로 만든 문장. 단계는 pet에서 다시 읽으면 안 됩니다.
+   * 그때는 이미 자란 뒤라 새 단계가 나옵니다(CareResult.grewFrom 참고).
+   */
+  function goToKeepsake(from: Stage) {
+    if (!pet) return;
+
+    const { prompt, caption } = buildKeepsakePrompt(pet.breed, from.id);
+    setKeepsakeOf(null);
+
+    router.push({
+      pathname: '/photo-gen',
+      params: {
+        breed: pet.breed,
+        stage: from.id,
+        photoUri: pet.photoUri ?? '',
+        prompt,
+        caption,
+      },
+    });
+  }
+
+  /**
+   * 떠난 뒤 처음부터 다시 시작합니다.
+   * 캐릭터를 지우고 사진 업로드 화면으로 보냅니다(확인 창은 띄우지 않습니다 —
+   * 이미 게임이 끝난 상태라 되돌릴 것이 없습니다).
+   */
+  async function handleStartOver() {
+    await release();
+    router.replace('/photo');
+  }
+
+  async function handleRelease() {
+    const ok = await confirmAction({
+      title: '처음부터 다시 키울까요?',
+      message: '지금까지 키운 기록은 사라집니다.',
+      confirmLabel: '다시 키우기',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    await release();
+    router.replace('/photo');
+  }
+
+  // 아직 저장소를 읽는 중
+  if (isLoading) {
+    return (
+      <Screen center edges={['top']}>
+        <Text style={[styles.loading, { color: c.textSecondary }]}>캐릭터를 준비하는 중...</Text>
+      </Screen>
+    );
+  }
+
+  // 아직 판정을 안 했으면 사진 화면으로 안내합니다
+  if (!pet) {
+    return (
+      <Screen center edges={['top']}>
+        <Text style={styles.emptyIcon}>🐾</Text>
+        <Text style={[styles.emptyTitle, { color: c.text }]}>아직 키우는 친구가 없어요</Text>
+        <Text style={[styles.emptyBody, { color: c.textSecondary }]}>
+          사진을 올려서 닮은 동물을 찾아보세요.
+        </Text>
+        <Button
+          label="사진 올리기"
+          onPress={() => router.replace('/photo')}
+          style={styles.emptyButton}
+        />
+      </Screen>
+    );
+  }
+
+  /**
+   * 돌봄이 완전히 끊겨 캐릭터가 떠난 상태.
+   *
+   * 여기서 게임은 끝이고, 이어서 키울 수 있는 대상이 없습니다. 그래서 다른 UI를
+   * 보여주지 않고 배웅 화면만 띄운 뒤 사진 업로드부터 다시 시작하게 합니다.
+   */
+  if (hasDeparted(pet)) {
+    return (
+      <Screen center edges={['top']}>
+        <Text style={styles.departEmoji}>{DEPARTURE.emoji}</Text>
+        <Text style={[styles.departTitle, { color: c.text }]}>{DEPARTURE.title}</Text>
+        <Text style={[styles.departBody, { color: c.textSecondary }]}>{DEPARTURE.message}</Text>
+
+        <View style={[styles.departRecord, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.departRecordText, { color: c.textSecondary }]}>
+            {BREEDS[pet.breed].label}와 함께한 {daysTogether(pet) + 1}일 · 돌봄 {pet.careCount}번 ·
+            쓰다듬기 {pet.pats}번
+          </Text>
         </View>
 
-        <Text style={[styles.petName, { color: c.text }]}>{petName}</Text>
-        <Text style={[styles.petMood, { color: c.textSecondary }]}>{card.archetype}</Text>
+        <Button
+          label="새 친구 만나기"
+          onPress={() => void handleStartOver()}
+          style={styles.departButton}
+        />
+      </Screen>
+    );
+  }
 
-        {/* 왜 이 동물인지. 판정 전에는 안내로 대신합니다. */}
-        <Text style={[styles.why, { color: c.textSecondary }]} numberOfLines={3}>
-          {analysis?.face || '사진을 올리면 닮은 동물을 찾아드려요.'}
-        </Text>
+  const stage = stageOf(pet);
+  const progress = progressToNext(pet);
+  const ending = endingOf(pet);
+  const days = daysTogether(pet);
+  const careOpen = isCareOpen(pet);
+  // 노년기에는 스탯이 멈추므로 시무룩한 표정도 쓰지 않습니다.
+  const sad = careOpen && STATS.some((s) => pet.stats[s.id] < SAD_BELOW);
+
+  const wish = careOpen ? wishOf(pet) : null;
+  const wishAction = wish ? CARE_ACTIONS.find((a) => a.id === wish.actionId) : null;
+  const activityAction = activity ? CARE_ACTIONS.find((a) => a.id === activity) : null;
+
+  // 조사는 단어에 따라 갈립니다("멍멍을" / "루비를") — lib/korean.ts
+  const nickname = user?.nickname ?? '나';
+
+  return (
+    <Screen scroll edges={['top']}>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <Text style={[styles.breed, { color: c.text }]}>
+            {nickname}
+            {objectParticle(nickname)} 닮은{' '}
+            <Text style={{ color: c.primary }}>{BREEDS[pet.breed].label}</Text>
+          </Text>
+          <Text style={[styles.days, { color: c.textSecondary }]}>함께한 {days + 1}일째</Text>
+          {/* 판정이 이 품종을 고른 이유. 없으면(예전 데이터) 줄 자체가 안 나옵니다. */}
+          {face ? (
+            <Text style={[styles.face, { color: c.textSecondary }]} numberOfLines={2}>
+              {face}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => void handleRelease()} hitSlop={8}>
+            <Text style={[styles.reset, { color: c.textSecondary }]}>다시 키우기</Text>
+          </Pressable>
+
+          {/*
+            TODO(김경빈): 이미지 생성 화면으로 넘어가는 자리입니다.
+            지금 키우는 캐릭터로 사진을 만들려면 세 가지가 필요합니다.
+              router.push({
+                pathname: '/photo-gen',
+                params: { breed: pet.breed, stage: stage.id, photoUri: pet.photoUri ?? '' },
+              })
+            breed는 한글 이름이 아니라 constants/pet.ts의 키입니다.
+            생성이 끝나면 결과 URI만 돌려주면 됩니다 — 게임 쪽은 안 건드려도 됩니다.
+          */}
+          <Pressable
+            onPress={() => {}}
+            disabled
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="사진 만들기 (준비 중)"
+            style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Text style={styles.photoIcon}>📷</Text>
+            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>사진 만들기</Text>
+          </Pressable>
+        </View>
       </View>
 
-      <View style={styles.stats}>
-        <StatBar label="배고픔" value={0.7} />
-        <StatBar label="행복도" value={0.45} />
+      <View style={styles.stageWrap}>
+        {/*
+          말풍선 자리를 늘 잡아둬서 아바타가 위아래로 흔들리지 않게 합니다.
+          아바타가 나중에 그려지는 형제라서, 튀어오를 때 말풍선을 덮지 않도록
+          zIndex로 말풍선을 위에 올려둡니다.
+        */}
+        <View style={styles.bubbleSlot}>
+          {reaction ? (
+            <ReactionBubble
+              key={reaction.key}
+              text={reaction.text}
+              muted={reaction.kind === 'refused'}
+              onHidden={() => setReaction(null)}
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.avatarSlot}>
+          <PetAvatar
+            stage={stage}
+            breed={pet.breed}
+            reactKey={reaction?.key ?? 0}
+            reactKind={reaction?.kind ?? 'care'}
+            reactEmoji={reaction?.emoji ?? null}
+            sad={sad}
+            activity={activity}
+            // 쓰다듬기는 제한이 없습니다 — 노년기에도, 돌봄이 진행 중에도 됩니다.
+            onPat={() => void handlePat()}
+          />
+        </View>
       </View>
 
-      <View style={styles.actions}>
-        {['🍚 밥주기', '🎾 놀아주기', '🛁 씻기기'].map((label) => (
-          <View
-            key={label}
-            style={[styles.actionChip, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={[styles.actionLabel, { color: c.textSecondary }]}>{label}</Text>
+      {/*
+        성장 연출이 완전히 끝난 뒤에만 띄웁니다(grewInto가 비워진 다음).
+        축하가 뜨는 동안 뒤에서 같이 나타나면 둘 다 제대로 안 읽힙니다.
+      */}
+      {keepsakeOf && !grewInto ? (
+        <View style={[styles.keepsake, { backgroundColor: c.surface, borderColor: c.primary }]}>
+          {/* 무엇을 남기는지 말로만 설명하면 안 와닿습니다. 떠나온 모습을
+              그대로 다시 그려서 보여줍니다 — 캐릭터가 SVG라 가능한 일입니다. */}
+          <PetCharacter breed={pet.breed} stage={keepsakeOf.id} animation="breathe" size={68} />
+
+          <View style={styles.keepsakeText}>
+            <Text style={[styles.keepsakeTitle, { color: c.text }]}>
+              {keepsakeOf.label} 모습, 남겨둘까요?
+            </Text>
+            <Text style={[styles.keepsakeBody, { color: c.textSecondary }]}>
+              올린 사진과 함께 기념 사진으로 만들어 드려요.
+            </Text>
+
+            <View style={styles.keepsakeButtons}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => goToKeepsake(keepsakeOf)}
+                style={({ pressed }) => [
+                  styles.keepsakeButton,
+                  { backgroundColor: c.primary, borderColor: c.primary },
+                  pressed && styles.carePressed,
+                ]}>
+                <Text style={[styles.keepsakeButtonText, { color: c.surface }]}>사진 남기기</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setKeepsakeOf(null)}
+                style={({ pressed }) => [
+                  styles.keepsakeButton,
+                  { borderColor: c.border },
+                  pressed && styles.carePressed,
+                ]}>
+                <Text style={[styles.keepsakeButtonText, { color: c.textSecondary }]}>
+                  괜찮아요
+                </Text>
+              </Pressable>
+            </View>
           </View>
-        ))}
-      </View>
+        </View>
+      ) : null}
 
-      <Text style={[styles.placeholder, { color: c.textSecondary }]}>
-        게임 기능은 준비 중이에요 (담당: 조윤주, 최윤우)
+      {isPackingBags(pet) ? (
+        // 떠나기 전에 반드시 경고합니다. 예고 없이 사라지면 버그로 보입니다.
+        <View style={[styles.depart, { backgroundColor: c.surface, borderColor: c.danger }]}>
+          <Text style={styles.departWarnEmoji}>🚪</Text>
+          <View style={styles.departWarnText}>
+            <Text style={[styles.departWarnTitle, { color: c.danger }]}>{DEPARTURE.warning}</Text>
+            <Text style={[styles.departWarnBody, { color: c.textSecondary }]}>
+              {departureSecondsLeft(pet)}초 안에 돌봐주지 않으면 여행을 떠나요
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {activityAction ? (
+        <ActivityBar
+          // 액션이 바뀌면 새로 시작해야 하므로 key를 붙입니다.
+          key={activityAction.id}
+          label={activityAction.activityLabel}
+          emoji={activityAction.emoji}
+          durationMs={activityAction.activityMs}
+          onDone={() => void finishCare(activityAction.id)}
+        />
+      ) : null}
+
+      {wish && wishAction ? (
+        <View style={[styles.wish, { backgroundColor: c.surface, borderColor: c.primary }]}>
+          <Text style={styles.wishEmoji}>{wishAction.emoji}</Text>
+          <View style={styles.wishText}>
+            <Text style={[styles.wishAsk, { color: c.text }]}>{wishAction.wishAsk}</Text>
+            <Text style={[styles.wishHint, { color: c.textSecondary }]}>
+              {wishAction.label}로 들어주면 보너스 · {wishSecondsLeft(pet)}초 남음
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {progress ? (
+        <View style={styles.growth}>
+          <View style={styles.growthLabelRow}>
+            <Text style={[styles.growthLabel, { color: c.textSecondary }]}>성장</Text>
+            <Text style={[styles.growthHint, { color: c.textSecondary }]}>{progress.hint}</Text>
+          </View>
+          <View
+            style={[styles.growthTrack, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
+            <View
+              style={[
+                styles.growthFill,
+                { width: `${progress.ratio * 100}%`, backgroundColor: c.primary },
+              ]}
+            />
+          </View>
+        </View>
+      ) : ending ? (
+        <View style={[styles.ending, { backgroundColor: c.surface, borderColor: c.primary }]}>
+          <Text style={[styles.endingTag, { color: c.primary }]}>ENDING</Text>
+          <Text style={styles.endingEmoji}>{ending.emoji}</Text>
+          <Text style={[styles.endingLabel, { color: c.text }]}>{ending.label}</Text>
+          <Text style={[styles.endingBody, { color: c.textSecondary }]}>{ending.message}</Text>
+        </View>
+      ) : null}
+
+      {careOpen ? (
+        <>
+          <View style={[styles.stats, { backgroundColor: c.surface, borderColor: c.border }]}>
+            {STATS.map((s) => (
+              <StatBar
+                key={s.id}
+                label={s.label}
+                emoji={s.emoji}
+                value={pet.stats[s.id]}
+                warnBelow={s.warnBelow}
+              />
+            ))}
+          </View>
+
+          <View style={styles.careRow}>
+            {CARE_ACTIONS.map((action) => {
+              // 지금 바라는 돌봄은 테두리를 강조해서 어디를 눌러야 할지 바로 보이게 합니다.
+              const wanted = wish?.actionId === action.id;
+              // 무언가 진행 중이면 다른 돌봄은 시작할 수 없습니다.
+              const busy = activity !== null;
+              const running = activity === action.id;
+
+              return (
+                <Pressable
+                  key={action.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={wanted ? `${action.label} (지금 바라는 것)` : action.label}
+                  accessibilityState={{ disabled: busy, busy: running }}
+                  disabled={busy}
+                  onPress={() => startCare(action.id)}
+                  style={({ pressed }) => [
+                    styles.careButton,
+                    {
+                      backgroundColor: c.surface,
+                      borderColor: running ? c.primary : wanted ? c.primary : c.border,
+                      borderWidth: running || wanted ? 2.5 : 1.5,
+                    },
+                    // 진행 중에는 눌리지 않는다는 걸 흐리게 보여줍니다.
+                    busy && !running && styles.careDisabled,
+                    pressed && styles.carePressed,
+                  ]}>
+                  <Text style={styles.careEmoji}>{action.emoji}</Text>
+                  <Text style={[styles.careLabel, { color: c.text }]}>{action.label}</Text>
+                  {running ? (
+                    <Text style={[styles.careWish, { color: c.primary }]}>진행 중</Text>
+                  ) : wanted ? (
+                    <Text style={[styles.careWish, { color: c.primary }]}>바라는 중</Text>
+                  ) : (
+                    // 대가를 누른 뒤에 알려주면 속은 기분이 듭니다. 먼저 보여줍니다.
+                    <Text style={[styles.careSide, { color: c.textSecondary }]}>
+                      {sideEffectHint(action) ?? ' '}
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : (
+        // 노년기 = 돌봄 마감. 스탯 게이지와 돌봄 버튼 대신 함께한 기록을 보여줍니다.
+        // (게이지가 계속 움직이면 엔딩이 확정된 결과로 읽히지 않습니다)
+        <View style={[styles.record, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <Text style={[styles.recordTitle, { color: c.text }]}>함께한 기록</Text>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>함께한 날</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{days + 1}일</Text>
+          </View>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>돌봐준 횟수</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{pet.careCount}번</Text>
+          </View>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>쓰다듬은 횟수</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{pet.pats}번</Text>
+          </View>
+          <View style={styles.recordRow}>
+            <Text style={[styles.recordLabel, { color: c.textSecondary }]}>쌓은 경험치</Text>
+            <Text style={[styles.recordValue, { color: c.text }]}>{pet.exp} EXP</Text>
+          </View>
+          <Text style={[styles.recordNote, { color: c.textSecondary }]}>
+            돌봄은 여기서 끝나요. 엔딩은 더 이상 바뀌지 않습니다.
+          </Text>
+        </View>
+      )}
+
+      {/*
+        대화는 버튼이 아니라 스와이프로 갑니다 — 이 화면과 대화 화면이 탭 형제입니다.
+        (탭 형제로 router.push 를 하면 스택이 쌓여서 뒤로가기가 이상해집니다.)
+        성격은 판정이 남긴 혼합 비율에서 만들어지므로 여기서 넘길 값이 없습니다.
+      */}
+      <Text style={[styles.swipeHint, { color: c.textSecondary }]}>
+        ← 옆으로 밀면 {BREEDS[pet.breed].label}와 대화할 수 있어요
       </Text>
+
+      {__DEV__ && (
+        // 개발·발표 시연용. 개발 빌드에서만 보입니다.
+        // 시간을 실제로 흘려 기다리지 않고도 성장·방치·엔딩을 확인하려는 목적입니다.
+        <View style={[styles.dev, { borderColor: c.border }]}>
+          <Text style={[styles.devTitle, { color: c.textSecondary }]}>개발용 시연 도구</Text>
+
+          <View style={styles.devRow}>
+            <DevButton
+              label="다음 단계 →"
+              onPress={() => void skipStage()}
+              disabled={stage.id === 'elder'}
+            />
+            <DevButton label="영유아기로 ↺" onPress={() => void rewind()} />
+          </View>
+
+          <View style={styles.devRow}>
+            <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
+            <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
+            <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
+          </View>
+
+          <View style={styles.devRow}>
+            <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
+          </View>
+
+          {/*
+            배율이 기획값(1)이 아닐 때만 경고합니다. 늘 띄워두면 정상 상태에서도
+            빨간 줄이 보여서, 정작 올려둔 채 커밋할 때 눈에 안 들어옵니다.
+          */}
+          <Text style={[styles.devNote, { color: c.textSecondary }]}>
+            {GameConfig.decaySpeed === 1
+              ? '감소 배율 1배(기획값) · 방치는 위 시연 도구로 확인하세요'
+              : `지금 감소 배율 ${GameConfig.decaySpeed}배 · 커밋 전 1로 되돌리세요`}
+          </Text>
+        </View>
+      )}
+
+      {grewInto ? (
+        <GrowthOverlay stage={grewInto} breed={pet.breed} onDone={() => setGrewInto(null)} />
+      ) : null}
     </Screen>
   );
 }
 
-function StatBar({ label, value }: { label: string; value: number }) {
+/** 시연 도구의 작은 버튼. 개발 빌드에서만 쓰입니다. */
+function DevButton({
+  label,
+  onPress,
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   const c = useTheme();
-  const ratio = Math.max(0, Math.min(1, value));
 
   return (
-    <View style={styles.statRow}>
-      <Text style={[styles.statLabel, { color: c.textSecondary }]}>{label}</Text>
-      <View style={[styles.statTrack, { backgroundColor: c.surfaceAlt }]}>
-        <View style={[styles.statFill, { backgroundColor: c.primary, width: `${ratio * 100}%` }]} />
-      </View>
-    </View>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`개발용: ${label}`}
+      style={({ pressed }) => [
+        styles.devButton,
+        { borderColor: c.border, backgroundColor: c.surfaceAlt },
+        disabled && styles.careDisabled,
+        pressed && styles.carePressed,
+      ]}>
+      <Text style={[styles.devButtonText, { color: c.textSecondary }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** 말풍선이 떠 있는 시간(ms). 이 뒤로는 스스로 사라집니다. */
+const BUBBLE_HOLD_MS = 2600;
+
+/**
+ * 돌봄 반응 말풍선. `key`가 바뀌면 새로 마운트되면서 다시 나타납니다.
+ * (텍스트만 바꾸면 같은 말이 반복될 때 아무 변화가 없어 보입니다)
+ *
+ * 잠깐 떠 있다가 스스로 사라집니다. 계속 남아 있으면 방금 한 행동의 반응인지
+ * 한참 전 것인지 알 수 없습니다.
+ */
+function ReactionBubble({
+  text,
+  muted = false,
+  onHidden,
+}: {
+  text: string;
+  /** 거절 반응이면 흐리게 — 성공과 톤을 구분합니다. */
+  muted?: boolean;
+  onHidden: () => void;
+}) {
+  const c = useTheme();
+  const [appear] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    // 0 → 1(등장) → 유지 → 2(사라짐)
+    Animated.sequence([
+      Animated.timing(appear, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.delay(BUBBLE_HOLD_MS),
+      Animated.timing(appear, { toValue: 2, duration: 300, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) onHidden();
+    });
+  }, [appear, onHidden]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.bubble,
+        {
+          backgroundColor: c.surface,
+          borderColor: muted ? c.border : c.primary,
+          borderStyle: muted ? 'dashed' : 'solid',
+        },
+        {
+          opacity: appear.interpolate({ inputRange: [0, 1, 2], outputRange: [0, 1, 0] }),
+          transform: [
+            {
+              translateY: appear.interpolate({ inputRange: [0, 1, 2], outputRange: [6, 0, -6] }),
+            },
+          ],
+        },
+      ]}>
+      <Text
+        style={[styles.bubbleText, { color: muted ? c.textSecondary : c.text }]}
+        numberOfLines={2}>
+        {text}
+      </Text>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  loading: {
+    fontSize: FontSize.body,
   },
-  greeting: {
-    fontSize: FontSize.label,
-    fontWeight: '700',
+  emptyIcon: {
+    fontSize: 52,
+    marginBottom: Spacing.md,
   },
-  signOut: {
-    fontSize: FontSize.caption,
-    textDecorationLine: 'underline',
-  },
-  stage: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-  },
-  pet: {
-    width: 176,
-    height: 176,
-    borderRadius: Radius.pill,
-    borderWidth: 2,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
-  },
-  petImage: {
-    width: '100%',
-    height: '100%',
-  },
-  petFace: {
-    fontSize: 84,
-  },
-  petName: {
+  emptyTitle: {
     fontSize: FontSize.title,
     fontWeight: '800',
   },
-  petMood: {
+  emptyBody: {
     fontSize: FontSize.body,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
   },
-  why: {
+  emptyButton: {
+    alignSelf: 'stretch',
+    marginTop: Spacing.xl,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  headerText: {
+    flex: 1,
+  },
+  breed: {
+    fontSize: FontSize.label,
+    fontWeight: '800',
+  },
+  days: {
+    fontSize: FontSize.caption,
+    marginTop: 2,
+  },
+  face: {
+    fontSize: FontSize.caption,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  swipeHint: {
     fontSize: FontSize.caption,
     textAlign: 'center',
-    lineHeight: 19,
-    marginTop: Spacing.xs,
+    paddingVertical: Spacing.sm,
   },
-  stats: {
+  reset: {
+    fontSize: FontSize.caption,
+    textDecorationLine: 'underline',
+  },
+  headerActions: {
+    alignItems: 'flex-end',
     gap: Spacing.sm,
-    marginBottom: Spacing.lg,
   },
-  statRow: {
+  photoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 6,
+    // 아직 동작하지 않는 자리라는 걸 눌러보기 전에 알 수 있게 눌러 둡니다.
+    opacity: 0.55,
+  },
+  photoIcon: {
+    fontSize: 15,
+  },
+  photoLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+  },
+  stageWrap: {
+    alignItems: 'center',
+    marginTop: Spacing.md,
+  },
+  bubbleSlot: {
+    minHeight: 52,
+    justifyContent: 'center',
+    // 아바타가 튀어올라도 말풍선이 가려지지 않게 위에 둡니다 (elevation은 안드로이드용)
+    zIndex: 2,
+    elevation: 2,
+  },
+  avatarSlot: {
+    zIndex: 1,
+  },
+  bubble: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    maxWidth: 260,
+  },
+  bubbleText: {
+    fontSize: FontSize.caption,
+    fontWeight: '600',
+  },
+  keepsake: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+    marginTop: Spacing.md,
+    borderWidth: 2,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
   },
-  statLabel: {
+  keepsakeText: {
+    flex: 1,
+    gap: 2,
+  },
+  keepsakeTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  keepsakeBody: {
+    fontSize: FontSize.caption,
+  },
+  keepsakeButtons: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  keepsakeButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: Radius.sm,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+  },
+  keepsakeButtonText: {
     fontSize: FontSize.caption,
     fontWeight: '700',
-    width: 48,
   },
-  statTrack: {
+  wish: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    borderWidth: 2,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  wishEmoji: {
+    fontSize: 22,
+  },
+  wishText: {
     flex: 1,
-    height: 10,
+  },
+  wishAsk: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  wishHint: {
+    fontSize: FontSize.caption,
+    marginTop: 2,
+  },
+  careWish: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  careSide: {
+    fontSize: FontSize.caption,
+    opacity: 0.7,
+  },
+  growth: {
+    marginTop: Spacing.lg,
+    gap: Spacing.xs,
+  },
+  growthLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  growthLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+  },
+  growthHint: {
+    fontSize: FontSize.caption,
+  },
+  growthTrack: {
+    height: 8,
     borderRadius: Radius.pill,
+    borderWidth: 1,
     overflow: 'hidden',
   },
-  statFill: {
+  growthFill: {
     height: '100%',
     borderRadius: Radius.pill,
   },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  ending: {
+    marginTop: Spacing.lg,
+    borderWidth: 2,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+  },
+  endingTag: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: Spacing.xs,
+  },
+  endingEmoji: {
+    fontSize: 28,
+  },
+  record: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
     gap: Spacing.sm,
   },
-  actionChip: {
+  recordTitle: {
+    fontSize: FontSize.label,
+    fontWeight: '800',
+    marginBottom: Spacing.xs,
+  },
+  recordRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  recordLabel: {
+    fontSize: FontSize.caption,
+  },
+  recordValue: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  recordNote: {
+    fontSize: FontSize.caption,
+    marginTop: Spacing.xs,
+  },
+  endingLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '800',
+    marginTop: Spacing.xs,
+  },
+  endingBody: {
+    fontSize: FontSize.caption,
+    marginTop: Spacing.xs,
+    textAlign: 'center',
+  },
+  stats: {
+    marginTop: Spacing.md,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    // 게이지가 한 줄짜리로 줄어서 여백도 같이 줄였습니다(화면을 덜 차지하게)
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+  },
+  careRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  careButton: {
     flex: 1,
     borderWidth: 1.5,
     borderRadius: Radius.md,
     paddingVertical: Spacing.md,
     alignItems: 'center',
+    gap: Spacing.xs,
   },
-  actionLabel: {
+  carePressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.97 }],
+  },
+  careDisabled: {
+    opacity: 0.45,
+  },
+  departEmoji: {
+    fontSize: 56,
+    marginBottom: Spacing.md,
+  },
+  departTitle: {
+    fontSize: FontSize.title,
+    fontWeight: '800',
+  },
+  departBody: {
+    fontSize: FontSize.body,
+    marginTop: Spacing.sm,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  departRecord: {
+    marginTop: Spacing.lg,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  departRecordText: {
+    fontSize: FontSize.caption,
+    textAlign: 'center',
+  },
+  departButton: {
+    alignSelf: 'stretch',
+    marginTop: Spacing.xl,
+  },
+  depart: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    borderWidth: 2,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  departWarnEmoji: {
+    fontSize: 22,
+  },
+  departWarnText: {
+    flex: 1,
+  },
+  departWarnTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  departWarnBody: {
+    fontSize: FontSize.caption,
+    marginTop: 2,
+  },
+  dev: {
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: Radius.md,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  devTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  devRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
+  devButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+  },
+  devButtonText: {
     fontSize: FontSize.caption,
     fontWeight: '700',
   },
-  placeholder: {
+  devNote: {
     fontSize: FontSize.caption,
-    textAlign: 'center',
-    marginTop: Spacing.md,
+    opacity: 0.7,
+  },
+  careEmoji: {
+    fontSize: 26,
+  },
+  careLabel: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
   },
 });
