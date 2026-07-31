@@ -26,6 +26,7 @@ import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { chatTarget } from '@/lib/llm/config';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
+import { parseReply } from '@/lib/persona-chat/reply';
 
 /**
  * 대화 확인용 화면 (개발용).
@@ -319,25 +320,39 @@ export default function ChatPreviewScreen() {
           </Text>
         )}
 
-        {messages.map((m, i) => (
-          <View
-            key={i}
-            style={[
-              styles.bubble,
-              m.role === 'user'
-                ? { alignSelf: 'flex-end', backgroundColor: c.primary }
-                : { alignSelf: 'flex-start', backgroundColor: c.surfaceAlt },
-              m.failed && { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.danger },
-            ]}>
-            <Text
+        {messages.map((m, i) => {
+          // 캐릭터 응답은 맨 앞 지문을 떼서 기울임으로 보여줍니다.
+          // `*`는 전송 형식일 뿐 사용자에게 보일 게 아닙니다.
+          const parsed = m.role === 'assistant' && !m.failed ? parseReply(m.content) : null;
+          return (
+            <View
+              key={i}
               style={[
-                styles.bubbleText,
-                { color: m.failed ? c.danger : m.role === 'user' ? c.onPrimary : c.text },
+                styles.bubble,
+                m.role === 'user'
+                  ? { alignSelf: 'flex-end', backgroundColor: c.primary }
+                  : { alignSelf: 'flex-start', backgroundColor: c.surfaceAlt },
+                m.failed && {
+                  backgroundColor: 'transparent',
+                  borderWidth: 1,
+                  borderColor: c.danger,
+                },
               ]}>
-              {m.content}
-            </Text>
-          </View>
-        ))}
+              {parsed?.action && (
+                <Text style={[styles.actionText, { color: c.textSecondary }]}>{parsed.action}</Text>
+              )}
+              {(!parsed || parsed.speech.length > 0) && (
+                <Text
+                  style={[
+                    styles.bubbleText,
+                    { color: m.failed ? c.danger : m.role === 'user' ? c.onPrimary : c.text },
+                  ]}>
+                  {parsed ? parsed.speech : m.content}
+                </Text>
+              )}
+            </View>
+          );
+        })}
 
         {/* 스왑해서 넘어온 화면에는 스피너를 띄우지 않습니다 — 여긴 안 기다리는 중 */}
         {pending === active.id && (
@@ -452,6 +467,11 @@ const styles = StyleSheet.create({
   },
   bubbleText: {
     fontSize: FontSize.body,
+  },
+  actionText: {
+    fontSize: FontSize.caption,
+    fontStyle: 'italic',
+    marginBottom: Spacing.xs,
   },
   spinner: {
     alignSelf: 'flex-start',

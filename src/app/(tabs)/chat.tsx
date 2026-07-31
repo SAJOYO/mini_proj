@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { chatTarget } from '@/lib/llm/config';
 import { dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/persona';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
+import { parseReply } from '@/lib/persona-chat/reply';
 import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
 import { loadAnalysis } from '@/lib/storage';
 
@@ -198,27 +199,39 @@ export default function ChatScreen() {
               </View>
             ))}
 
-          {messages.map((m) => (
-            <View
-              key={m.id}
-              style={[
-                styles.bubble,
-                m.role === 'user'
-                  ? [styles.mine, { backgroundColor: c.primary }]
-                  : [
-                      styles.theirs,
-                      { backgroundColor: c.surface, borderColor: m.failed ? c.danger : c.border },
-                    ],
-              ]}>
-              <Text
+          {messages.map((m) => {
+            // 캐릭터 응답은 맨 앞 지문(*...*)을 떼서 기울임으로 보여줍니다.
+            // 별표는 전송 형식일 뿐 화면에 보일 게 아닙니다 (persona-chat/reply.ts).
+            const parsed = m.role === 'assistant' && !m.failed ? parseReply(m.content) : null;
+            return (
+              <View
+                key={m.id}
                 style={[
-                  styles.bubbleText,
-                  { color: m.role === 'user' ? c.onPrimary : m.failed ? c.danger : c.text },
+                  styles.bubble,
+                  m.role === 'user'
+                    ? [styles.mine, { backgroundColor: c.primary }]
+                    : [
+                        styles.theirs,
+                        { backgroundColor: c.surface, borderColor: m.failed ? c.danger : c.border },
+                      ],
                 ]}>
-                {m.content}
-              </Text>
-            </View>
-          ))}
+                {parsed?.action && (
+                  <Text style={[styles.actionText, { color: c.textSecondary }]}>
+                    {parsed.action}
+                  </Text>
+                )}
+                {(!parsed || parsed.speech.length > 0) && (
+                  <Text
+                    style={[
+                      styles.bubbleText,
+                      { color: m.role === 'user' ? c.onPrimary : m.failed ? c.danger : c.text },
+                    ]}>
+                    {parsed ? parsed.speech : m.content}
+                  </Text>
+                )}
+              </View>
+            );
+          })}
 
           {sending && (
             <View
@@ -354,6 +367,11 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: FontSize.body,
     lineHeight: 21,
+  },
+  actionText: {
+    fontSize: FontSize.caption,
+    fontStyle: 'italic',
+    marginBottom: Spacing.xs,
   },
   composer: {
     flexDirection: 'row',
