@@ -10,7 +10,6 @@ import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { canDownload, downloadBlob, latestOfStage, loadPhoto } from '@/lib/album';
-import { survivesReload } from '@/lib/image';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
 
 /**
@@ -60,13 +59,39 @@ export default function PhotoGenScreen() {
   // 링크로 들어온 문자열이라 그대로 믿지 않고 아는 값인지 확인합니다.
   const breed = resolveBreed(params.breed);
   const stage = resolveStage(params.stage);
-  // 웹에서 새로고침하면 blob: URI는 문자열만 남고 가리키는 데이터가 사라집니다.
-  // 그대로 쓰면 깨진 칸이 뜨고 업로드도 실패하므로 아예 "사진 없음"으로 봅니다.
-  const photoUri = survivesReload(params.photoUri) ? (params.photoUri as string) : null;
+  const given = typeof params.photoUri === 'string' && params.photoUri ? params.photoUri : null;
   const prompt = typeof params.prompt === 'string' && params.prompt ? params.prompt : null;
   const caption = typeof params.caption === 'string' ? params.caption : '';
 
   const busy = isRunning(job, stage);
+
+  /**
+   * 올린 사진을 지금 쓸 수 있는가.
+   *
+   * `survivesReload`를 쓰면 안 됩니다. 그건 "새로고침을 견디는가"를 묻는
+   * 것이라 웹의 blob: URI는 **살아 있어도** 무조건 false가 됩니다. 웹
+   * 사진 선택기는 항상 blob:을 주기 때문에, 방금 올린 사진까지 "없음"이
+   * 되어버립니다.
+   *
+   * 우리에게 필요한 건 "지금 읽을 수 있는가"라서 실제로 한 번 읽어봅니다.
+   * 새로고침으로 죽은 blob:은 여기서 걸러집니다.
+   */
+  const [deadBlob, setDeadBlob] = useState(false);
+  useEffect(() => {
+    // blob: 이 아니면(file://·data: 등) 그 자리에 계속 있는 것들이라 확인이 필요 없습니다.
+    if (!given || !given.startsWith('blob:')) return;
+
+    let watching = true;
+    fetch(given)
+      .then((res) => watching && !res.ok && setDeadBlob(true))
+      .catch(() => watching && setDeadBlob(true));
+
+    return () => {
+      watching = false;
+    };
+  }, [given]);
+
+  const photoUri = deadBlob ? null : given;
 
   /** 이 단계에서 마지막으로 만든 사진. 앨범에는 그 전 것들도 남아 있습니다. */
   const [latest, setLatest] = useState<Blob | null>(null);
