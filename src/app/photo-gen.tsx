@@ -158,7 +158,7 @@ export default function PhotoGenScreen() {
               <ActivityIndicator color={c.primary} />
               <Text style={[styles.stageText, { color: c.textSecondary }]}>{STEP_TEXT[step]}</Text>
               <Text style={[styles.stageHint, { color: c.textSecondary }]}>
-                한 장에 1분 가까이 걸릴 수 있어요
+                한 장에 3~4분쯤 걸려요. 화면을 켜둔 채 기다려 주세요
               </Text>
             </View>
           ) : (
