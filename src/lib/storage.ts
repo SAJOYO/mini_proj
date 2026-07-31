@@ -16,6 +16,8 @@ const Keys = {
   swipeHintSeen: '@pet/swipeHintSeen',
   analysis: '@pet/analysis',
   pet: '@pet/pet',
+  photoJob: '@pet/photoJob',
+  album: '@pet/album',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -141,4 +143,64 @@ export async function savePet(pet: unknown): Promise<void> {
 
 export async function clearPet(): Promise<void> {
   await AsyncStorage.removeItem(Keys.pet);
+}
+
+/**
+ * 진행 중인 사진 생성 작업의 접수증.
+ *
+ * 사진 자체는 여기 넣지 않습니다 — 이미지는 lib/album.ts(IndexedDB)에 있고,
+ * 여기에는 "어떤 작업을 기다리는 중인지"만 둡니다. 몇 십 바이트짜리 정보라
+ * AsyncStorage에 맞습니다.
+ *
+ * 이걸 저장해두는 이유는 **새로고침 때문**입니다. 생성이 몇 분 걸려서 그
+ * 사이에 탭을 새로 고치는 일이 생기는데, 접수증이 남아 있으면 다시 열었을 때
+ * 결과를 되찾을 수 있습니다(ComfyUI가 히스토리를 들고 있습니다).
+ */
+export type PhotoJob = {
+  breed: string;
+  stage: string;
+  /** 완성되면 사진에 얹을 한 줄. 결과를 앨범에 넣을 때 같이 저장됩니다. */
+  caption: string;
+  /** ComfyUI가 준 접수증. */
+  promptId: string;
+  /** 시작 시각(ms). 너무 오래된 작업을 버리는 데 씁니다. */
+  startedAt: number;
+};
+
+export async function loadPhotoJob(): Promise<PhotoJob | null> {
+  return readJson<PhotoJob>(Keys.photoJob);
+}
+
+export async function savePhotoJob(job: PhotoJob): Promise<void> {
+  await writeJson(Keys.photoJob, job);
+}
+
+export async function clearPhotoJob(): Promise<void> {
+  await AsyncStorage.removeItem(Keys.photoJob);
+}
+
+/**
+ * 앨범에 든 사진 한 장의 정보. **이미지는 여기 없습니다.**
+ *
+ * 이미지는 lib/album.ts가 IndexedDB에 id로 넣어두고, 여기에는 "어느 단계에서
+ * 언제 찍었는지"만 남습니다. 목록이 가벼워야 앨범 화면이 사진을 다 읽지 않고도
+ * 그려지고, 무거운 이미지를 localStorage에 넣는 사고도 막힙니다.
+ */
+export type PhotoEntry = {
+  /** IndexedDB에서 이미지를 꺼낼 때 쓰는 id. */
+  id: string;
+  breed: string;
+  stage: string;
+  /** 사진에 얹는 한 줄 ("청소년기의 마지막 날"). */
+  caption: string;
+  /** 만든 시각(ms). 목록 정렬에 씁니다. */
+  createdAt: number;
+};
+
+export async function loadAlbumEntries(): Promise<PhotoEntry[]> {
+  return (await readJson<PhotoEntry[]>(Keys.album)) ?? [];
+}
+
+export async function saveAlbumEntries(entries: PhotoEntry[]): Promise<void> {
+  await writeJson(Keys.album, entries);
 }
