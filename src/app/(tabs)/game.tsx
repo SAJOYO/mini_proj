@@ -113,6 +113,9 @@ export default function GameScreen() {
    */
   const [activity, setActivity] = useState<CareActionId | null>(null);
 
+  /** 개발용 시연 도구를 펼쳤는지. 발표 화면을 가리지 않게 기본은 접어둡니다. */
+  const [devOpen, setDevOpen] = useState(false);
+
   /** 연달아 쓰다듬은 횟수. 손을 떼면(1.5초) 초기화됩니다. */
   const patStreak = useRef(0);
   const lastPatAt = useRef(0);
@@ -582,37 +585,60 @@ export default function GameScreen() {
       {__DEV__ && (
         // 개발·발표 시연용. 개발 빌드에서만 보입니다.
         // 시간을 실제로 흘려 기다리지 않고도 성장·방치·엔딩을 확인하려는 목적입니다.
+        //
+        // 기본은 접어둡니다. 발표는 개발 서버로 하기 때문에 이 도구가 그대로
+        // 보이는데, 게임 화면의 절반을 차지해서 정작 보여줄 것을 가립니다.
+        // 그렇다고 지우면 성장·엔딩을 시연할 방법이 없습니다 — 노년기 진입이
+        // 함께한 지 7일, 청년기가 180 EXP 라 실제로 기다릴 수 없습니다.
         <View style={[styles.dev, { borderColor: c.border }]}>
-          <Text style={[styles.devTitle, { color: c.textSecondary }]}>개발용 시연 도구</Text>
+          <Pressable
+            onPress={() => setDevOpen((open) => !open)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: devOpen }}>
+            <Text style={[styles.devTitle, { color: c.textSecondary }]}>
+              개발용 시연 도구 {devOpen ? '▴' : '▾'}
+            </Text>
+          </Pressable>
 
-          <View style={styles.devRow}>
-            <DevButton
-              label="다음 단계 →"
-              onPress={() => void skipStage()}
-              disabled={stage.id === 'elder'}
-            />
-            <DevButton label="영유아기로 ↺" onPress={() => void rewind()} />
-          </View>
+          {devOpen && (
+            <>
+              <View style={styles.devRow}>
+                <DevButton
+                  label="다음 단계 →"
+                  onPress={() => void skipStage()}
+                  disabled={stage.id === 'elder'}
+                />
+                <DevButton label="영유아기로 ↺" onPress={() => void rewind()} />
+              </View>
 
-          <View style={styles.devRow}>
-            <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
-            <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
-            <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
-          </View>
+              <View style={styles.devRow}>
+                <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
+                <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
+                <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
+              </View>
 
-          <View style={styles.devRow}>
-            <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
-          </View>
+              <View style={styles.devRow}>
+                <DevButton label="여행 보내기 🧳" onPress={() => void forceDepart()} />
+              </View>
+
+              <Text style={[styles.devNote, { color: c.textSecondary }]}>
+                감소 배율 1배(기획값) · 방치는 위 시연 도구로 확인하세요
+              </Text>
+            </>
+          )}
 
           {/*
-            배율이 기획값(1)이 아닐 때만 경고합니다. 늘 띄워두면 정상 상태에서도
-            빨간 줄이 보여서, 정작 올려둔 채 커밋할 때 눈에 안 들어옵니다.
+            배율 경고는 접어도 보입니다. 접힌 채로 숨기면 올려둔 걸 잊고
+            커밋하게 됩니다 — 경고는 눈에 띄어야 경고입니다.
+            기획값(1)일 때는 안 띄웁니다. 늘 띄우면 정상 상태에서도 빨간 줄이
+            보여서, 정작 올려뒀을 때 눈에 안 들어옵니다.
           */}
-          <Text style={[styles.devNote, { color: c.textSecondary }]}>
-            {GameConfig.decaySpeed === 1
-              ? '감소 배율 1배(기획값) · 방치는 위 시연 도구로 확인하세요'
-              : `지금 감소 배율 ${GameConfig.decaySpeed}배 · 커밋 전 1로 되돌리세요`}
-          </Text>
+          {GameConfig.decaySpeed !== 1 && (
+            <Text style={[styles.devNote, { color: c.danger }]}>
+              지금 감소 배율 {GameConfig.decaySpeed}배 · 커밋 전 1로 되돌리세요
+            </Text>
+          )}
         </View>
       )}
 
