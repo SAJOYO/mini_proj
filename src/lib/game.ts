@@ -15,7 +15,7 @@
  * 숫자를 만지고 싶으면 GameConfig 하나만 보세요.
  */
 
-import type { BreedId } from '@/constants/pet';
+import { resolveBreed, type BreedId } from '@/constants/pet';
 
 /* ------------------------------------------------------------------ */
 /* 스탯                                                                */
@@ -475,10 +475,16 @@ export function createPet(breed: BreedId, photoUri: string | null, now: number =
  * 필드를 새로 추가하면 **이전에 저장된 캐릭터에는 그 값이 없습니다.** 그대로 쓰면
  * `pet.pats`가 undefined가 되어 화면에 "NaN번"이 찍히거나 계산이 깨집니다.
  * 새 필드를 넣을 때마다 여기에 기본값을 한 줄 추가하세요.
+ *
+ * 값의 **모양**이 바뀐 경우도 여기서 받아냅니다. 품종이 그랬습니다 — 예전에는
+ * 한글 이름("허스키")을 저장했는데 지금은 constants/pet.ts의 키를 씁니다.
+ * 그대로 두면 BREEDS[pet.breed]가 undefined가 되어 게임 화면이 통째로 죽습니다.
  */
 export function normalizePet(raw: Pet, now: number = Date.now()): Pet {
   return {
     ...raw,
+    // 모르는 품종이면 기본 형태로 떨어집니다. 화면이 깨지는 것보단 낫습니다.
+    breed: resolveBreed(raw.breed),
     pats: raw.pats ?? 0,
     wish: raw.wish ?? null,
     lastWishEndedAt: raw.lastWishEndedAt ?? now,
