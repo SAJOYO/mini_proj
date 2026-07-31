@@ -27,7 +27,8 @@ export const ANIMATION_NAMES = [
   'chew', // 먹는 중
   'yawn', // 졸림
   'sleep', // 자는 중
-  'wagTail', // 기분 좋음
+  'wagTail', // 기분 좋음 — 신나서 들썩임
+  'wagSlow', // 쓰다듬김 — 꼬리만 느긋하게, 눈은 게슴츠레
   'droop', // 아픔 / 기운 없음
 ] as const;
 

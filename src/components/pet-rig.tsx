@@ -197,6 +197,24 @@ const MOTION: Record<AnimationName, MotionSpec> = {
     mouthOpen: 0.5,
     blink: true,
   },
+  /*
+   * 쓰다듬김 — 꼬리만 느긋하게.
+   *
+   * wagTail과 일부러 갈라놨습니다. 저쪽은 입을 벌리고 240ms로 파닥이는
+   * 고에너지 동작이라 "신난다!"로 읽히는데, 쓰다듬기는 흥분이 아니라
+   * 만족·나른함입니다(PAT_REACTIONS의 "골골골...", "눈을 감고 있어요").
+   * 노년기 대사에는 아예 "천천히 꼬리를 흔들어요"가 있어서, 빠른 쪽을
+   * 재사용하면 글과 그림이 어긋납니다.
+   *
+   * 그래서 폭은 절반, 속도는 절반 이하, 입은 다물고 눈만 살짝 감깁니다.
+   */
+  wagSlow: {
+    tailWag: [-18, 6, 420],
+    bodyLift: [0, -2, 900],
+    eyeOpen: 0.8,
+    mouthOpen: 0,
+    blink: true,
+  },
   // 아픔 — 축 처진 채 아주 느리게
   droop: {
     bodyLift: [5, 7, 2800],

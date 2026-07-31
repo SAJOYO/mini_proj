@@ -12,6 +12,14 @@ import type { CareActionId, Stage } from '@/lib/game';
 /** 반응의 종류. 종류마다 다르게 움직여야 결과가 구분됩니다. */
 export type ReactKind = 'care' | 'pat' | 'refused';
 
+/**
+ * 쓰다듬은 뒤 꼬리 동작(wagSlow)을 유지하는 시간(ms).
+ *
+ * 연타 판정 창(game.tsx의 PAT_STREAK_WINDOW_MS = 1500)보다 살짝 짧게 잡았습니다.
+ * 연달아 쓰다듬는 동안에는 계속 흔들고, 손을 떼면 자연스럽게 풀립니다.
+ */
+const PAT_MOTION_MS = 1200;
+
 type PetAvatarProps = {
   stage: Stage;
   /**
@@ -71,13 +79,18 @@ const IDLE_LOOP: readonly { animation: AnimationName; ms: number }[] = [
  */
 function animationFor(
   activity: CareActionId | null,
+  patting: boolean,
   sad: boolean,
   idleStep: number,
 ): AnimationName {
   if (activity === 'feed') return 'chew';
   if (activity === 'play') return 'wagTail';
   if (activity === 'wash') return 'lookAround';
+  // 쓰다듬기는 돌봄 중에도 눌리지만, 그때는 돌봄 동작이 이깁니다 —
+  // 밥을 먹다 말고 꼬리를 흔들면 무엇을 하는 중인지 알 수 없게 됩니다.
+  if (patting) return 'wagSlow';
   // 돌봄 중이 아닐 때만 기분이 드러납니다. 밥 먹는 중에 시무룩하면 어색합니다.
+  // 쓰다듬는 순간에는 잠깐 좋아하다가 손을 떼면 다시 시무룩해집니다.
   if (sad) return 'droop';
   return IDLE_LOOP[idleStep]?.animation ?? 'breathe';
 }
@@ -131,9 +144,29 @@ export function PetAvatar({
   const [shake] = useState(() => new Animated.Value(0));
   const [act] = useState(() => new Animated.Value(0));
 
+  /**
+   * 쓰다듬김 동작이 걸려 있는 동안 true.
+   *
+   * patSeq는 "몇 번째 쓰다듬기인지"만 셉니다. 연달아 쓰다듬을 때 이미 true인
+   * patting을 다시 true로 놔봐야 상태가 안 바뀌어서 아래 타이머가 새로
+   * 걸리지 않고, 첫 번째 쓰다듬기 기준으로 풀려버립니다. 그래서 매번 값이
+   * 바뀌는 카운터를 따로 두고 그걸 의존성에 넣습니다.
+   */
+  const [patting, setPatting] = useState(false);
+  const [patSeq, setPatSeq] = useState(0);
+
+  useEffect(() => {
+    if (!patting) return;
+
+    const timer = setTimeout(() => setPatting(false), PAT_MOTION_MS);
+    return () => clearTimeout(timer);
+  }, [patting, patSeq]);
+
   /** 대기 동작이 IDLE_LOOP의 몇 번째인지. */
   const [idleStep, setIdleStep] = useState(0);
-  const idle = !activity && !sad;
+  // 쓰다듬는 동안도 대기가 아닙니다 — 그동안 순서가 몰래 흘러가면
+  // 손을 뗀 뒤 엉뚱한 자리에서 이어집니다.
+  const idle = !activity && !sad && !patting;
 
   /**
    * 대기 상태로 들어올 때마다 순서를 처음으로 되돌립니다.
@@ -275,7 +308,14 @@ export function PetAvatar({
   return (
     <View style={styles.wrap}>
       <Pressable
-        onPress={onPat}
+        onPress={() => {
+          // 동작은 결과를 기다리지 않고 누르는 즉시 겁니다 — 쓰다듬기는
+          // 거절이 없는 상호작용이라 기다릴 이유가 없고, 손맛이 늦으면
+          // 반응을 보려고 누르는 행동 자체가 심심해집니다.
+          setPatting(true);
+          setPatSeq((n) => n + 1);
+          onPat?.();
+        }}
         disabled={!onPat}
         accessibilityRole="button"
         accessibilityLabel={`${stage.label} 캐릭터 쓰다듬기`}
@@ -295,7 +335,7 @@ export function PetAvatar({
               <PetCharacter
                 breed={breed}
                 stage={stage.id}
-                animation={animationFor(activity, sad, idleStep)}
+                animation={animationFor(activity, patting, sad, idleStep)}
                 size={size}
               />
             </Animated.View>
