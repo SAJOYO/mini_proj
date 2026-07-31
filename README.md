@@ -325,6 +325,51 @@ const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 
 ---
 
+## 사진 만들기 (ComfyUI)
+
+게임 화면의 📷 버튼과 성장 직후 배너에서 기념 사진을 만듭니다.
+생성은 팀원 노트북에서 도는 **ComfyUI**가 하고, 앱은 HTTP로 주문만 넣습니다.
+
+지금은 로컬 서버에만 붙어서 **API 키가 필요 없습니다.** 위의 A/B 논쟁은
+클라우드로 옮길 때 다시 꺼내면 됩니다.
+
+### 준비
+
+`.env.example`을 `.env`로 복사하고 서버 주소를 채우세요.
+
+```bash
+EXPO_PUBLIC_COMFY_URL=http://192.168.0.2:8188
+```
+
+ComfyUI를 띄우는 쪽에서는 아래 옵션이 필요합니다.
+
+```bash
+python main.py --listen 0.0.0.0 --enable-cors-header "*"
+```
+
+`--listen`이 없으면 그 노트북 안에서만 열리고, `--enable-cors-header`가 없으면
+`npm run web`에서 브라우저가 요청을 전부 막습니다. 윈도우면 방화벽에서
+**8188 포트 인바운드 허용**도 필요합니다.
+
+붙는지 확인은 브라우저에서 `http://<주소>:8188/system_stats` — JSON이 나오면 성공입니다.
+
+### 어디를 고치면 되나
+
+| 하고 싶은 것 | 고칠 곳 |
+| --- | --- |
+| 워크플로 교체 | `src/lib/krea2_identity_edit.json` (ComfyUI에서 **Export (API)**) |
+| 바뀐 워크플로의 노드 번호 | `src/lib/comfy.ts`의 `NODES` |
+| 프롬프트 문장 | `src/lib/photo-prompt.ts` |
+| 화면 (로딩·결과·에러) | `src/app/photo-gen.tsx` |
+
+앱이 워크플로에서 덮어쓰는 값은 **세 개뿐**입니다 — 사용자 사진(`LoadImage`),
+프롬프트(`Krea2EditGroundedEncode`), seed(`KSampler`). 나머지는 JSON 그대로 갑니다.
+
+> ⚠️ 결과 이미지 URL은 **ComfyUI 서버가 켜져 있는 동안만** 유효합니다.
+> 서버를 끄면 이미 만든 사진도 안 보입니다. 오래 남기려면 따로 받아 두어야 합니다.
+
+---
+
 ## 협업 규칙
 
 ### 브랜치 구조

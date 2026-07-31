@@ -175,11 +175,12 @@ export default function GameScreen() {
   }
 
   /**
-   * 방금 떠나온 모습으로 기념 사진을 만들러 갑니다.
+   * 기념 사진을 만들러 갑니다.
    *
-   * 넘기는 건 네 가지입니다 — 품종, **떠나온** 단계, 사용자가 올린 사진,
-   * 그리고 그 둘로 만든 문장. 단계는 pet에서 다시 읽으면 안 됩니다.
-   * 그때는 이미 자란 뒤라 새 단계가 나옵니다(CareResult.grewFrom 참고).
+   * 넘기는 건 네 가지입니다 — 품종, 단계, 사용자가 올린 사진, 그리고 그 둘로
+   * 만든 문장. **단계를 인자로 받는 것이 핵심입니다.** 성장 직후 배너에서
+   * 부를 때는 pet에서 다시 읽으면 안 됩니다. 그때는 이미 자란 뒤라 새 단계가
+   * 나옵니다(CareResult.grewFrom 참고). 헤더 버튼에서는 지금 단계를 넘깁니다.
    */
   function goToKeepsake(from: Stage) {
     if (!pet) return;
@@ -310,21 +311,14 @@ export default function GameScreen() {
           </Pressable>
 
           {/*
-            TODO(김경빈): 이미지 생성 화면으로 넘어가는 자리입니다.
-            지금 키우는 캐릭터로 사진을 만들려면 세 가지가 필요합니다.
-              router.push({
-                pathname: '/photo-gen',
-                params: { breed: pet.breed, stage: stage.id, photoUri: pet.photoUri ?? '' },
-              })
-            breed는 한글 이름이 아니라 constants/pet.ts의 키입니다.
-            생성이 끝나면 결과 URI만 돌려주면 됩니다 — 게임 쪽은 안 건드려도 됩니다.
+            성장을 기다리지 않고 **지금 모습으로** 사진을 만드는 자리입니다.
+            성장 직후 배너(goToKeepsake)와 달리 여기서는 지금 단계를 넘깁니다.
           */}
           <Pressable
-            onPress={() => {}}
-            disabled
+            onPress={() => goToKeepsake(stage)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="사진 만들기 (준비 중)"
+            accessibilityLabel="사진 만들기"
             style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
             <Text style={styles.photoIcon}>📷</Text>
             <Text style={[styles.photoLabel, { color: c.textSecondary }]}>사진 만들기</Text>
