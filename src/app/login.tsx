@@ -7,6 +7,7 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
+import { usePet } from '@/lib/pet';
 
 const NICKNAME_MIN = 2;
 const NICKNAME_MAX = 10;
@@ -21,6 +22,7 @@ export default function LoginScreen() {
   const c = useTheme();
   const router = useRouter();
   const { signIn } = useAuth();
+  const { pet } = usePet();
 
   const [nickname, setNickname] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,10 @@ export default function LoginScreen() {
     setError(null);
     try {
       await signIn(trimmed);
-      router.replace('/photo');
+      // 기기에 키우던 친구가 남아 있으면 사진 화면을 건너뜁니다 — index.tsx와 같은 규칙입니다.
+      // 여기서 무조건 /photo로 보내면, 키우는 중인데도 사진을 다시 올리게 되고
+      // 그렇게 넘긴 품종은 game.tsx가 무시해서 분석 결과가 조용히 사라집니다.
+      router.replace(pet ? '/game' : '/photo');
     } catch {
       setError('저장에 실패했어요. 다시 시도해 주세요.');
       setSubmitting(false);
@@ -117,6 +122,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.md,
     fontSize: FontSize.label,
+    // Screen이 userSelect: 'none'을 걸어두므로 입력창에서만 다시 켭니다.
+    // (안 켜면 웹에서 입력한 글자를 드래그로 선택할 수 없습니다.)
+    userSelect: 'text',
   },
   helper: {
     fontSize: FontSize.caption,
