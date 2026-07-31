@@ -62,6 +62,12 @@ export async function clearUser(): Promise<void> {
     Keys.analysis,
     Keys.pet,
   ]);
+
+  // 대화 기록은 AsyncStorage 가 아니라 SQLite 에 있습니다(lib/chat-history.ts).
+  // 위 목록에 키를 추가하는 것으로는 안 지워져서 따로 부릅니다 — 안 부르면
+  // 로그아웃해도 앞사람의 대화가 다음 사람에게 보입니다.
+  const { clearChatHistory } = await import('@/lib/chat-history');
+  await clearChatHistory();
 }
 
 /** 사용자가 고른 사진의 로컬 URI. 아직 안 골랐으면 null. */

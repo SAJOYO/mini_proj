@@ -21,6 +21,7 @@ import { dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/person
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
 import { parseReply } from '@/lib/persona-chat/reply';
 import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
+import { appendMessage, loadRecent } from '@/lib/chat-history';
 import { loadAnalysis } from '@/lib/storage';
 
 /**
@@ -48,6 +49,15 @@ const CHAT = chatTarget();
 
 /** 안내 문구가 스스로 사라지기까지. */
 const NOTICE_MS = 5000;
+
+/** 화면에 복원하는 최대 기록. 저장은 전부 하고, 복원만 자릅니다. */
+const RESTORE_LIMIT = 200;
+
+/**
+ * LLM 에 보내는 히스토리 창. 기록이 영구가 되는 순간 대화가 길어질수록
+ * 매 요청 토큰이 무한정 자랍니다 — 저장은 전부, 전송은 최근 이만큼만.
+ */
+const LLM_WINDOW = 20;
 
 export default function ChatScreen() {
   const c = useTheme();
@@ -78,12 +88,30 @@ export default function ChatScreen() {
     setTimeout(() => setNotice((current) => (current === text ? null : current)), NOTICE_MS);
   }, []);
 
+  // 대화 스레드는 펫 단위입니다. 판정 시각(createdAt)이 곧 펫의 식별자라,
+  // 사진을 다시 올려 새 캐릭터가 태어나면 스레드도 새로 시작합니다.
+  // 이전 스레드는 지우지 않고 DB 에 남습니다.
+  const petIdRef = useRef<string>('neutral');
+
   useEffect(() => {
     let cancelled = false;
-    loadAnalysis().then((saved) => {
+    loadAnalysis().then(async (saved) => {
       if (cancelled) return;
       if (saved) setMix(resolveMix(saved.mix));
       setAnalyzed(saved !== null);
+
+      // 지난 대화를 복원합니다. 새로고침해도 기록이 이어집니다.
+      petIdRef.current = saved?.createdAt ?? 'neutral';
+      const stored = await loadRecent(petIdRef.current, RESTORE_LIMIT);
+      if (cancelled || stored.length === 0) return;
+      setMessages(
+        stored.map((m) => ({
+          id: `db-${m.id}`,
+          role: m.role,
+          content: m.content,
+          failed: m.failed || undefined,
+        })),
+      );
     });
     return () => {
       cancelled = true;
@@ -117,14 +145,19 @@ export default function ChatScreen() {
     setNotice(null);
     setDraft('');
 
-    // 실패한 답은 히스토리에서 뺍니다. 에러 문구를 캐릭터가 한 말로
-    // 기억시키면 다음 대답이 그걸 이어받습니다.
+    // 실패한 답은 히스토리에서 빼고(에러 문구를 캐릭터가 한 말로 기억시키면
+    // 다음 대답이 그걸 이어받습니다), 최근 LLM_WINDOW 건만 보냅니다.
     const history: ChatTurn[] = [
-      ...messages.filter((m) => !m.failed).map(({ role, content }) => ({ role, content })),
+      ...messages
+        .filter((m) => !m.failed)
+        .slice(-LLM_WINDOW)
+        .map(({ role, content }) => ({ role, content })),
       { role: 'user', content: text },
     ];
 
     setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
+    // 저장은 화면과 별개로 흘러갑니다. 실패해도 대화는 계속됩니다(no-op 폴백).
+    void appendMessage(petIdRef.current, { role: 'user', content: text });
 
     try {
       const answer = await client.reply({ model: CHAT.model, card, name: petName, history });
@@ -132,6 +165,7 @@ export default function ChatScreen() {
         ...prev,
         { id: `a-${prev.length}`, role: 'assistant', content: answer },
       ]);
+      void appendMessage(petIdRef.current, { role: 'assistant', content: answer });
     } catch (error) {
       // 원본은 화면에 뿌리지 않되 버리지도 않습니다. 개발 중에는 원인을 봐야 합니다.
       console.warn('[chat] 요청 실패:', error);
@@ -145,6 +179,11 @@ export default function ChatScreen() {
           ...prev,
           { id: `a-${prev.length}`, role: 'assistant', content: message, failed: true },
         ]);
+        void appendMessage(petIdRef.current, {
+          role: 'assistant',
+          content: message,
+          failed: true,
+        });
       }
     } finally {
       busy.current = false;
