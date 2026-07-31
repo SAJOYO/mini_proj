@@ -6,6 +6,7 @@ import { ActivityBar } from '@/components/activity-bar';
 import { Button } from '@/components/button';
 import { GrowthOverlay } from '@/components/growth-overlay';
 import { PetAvatar, type ReactKind } from '@/components/pet-avatar';
+import { PetCharacter } from '@/components/pet-character';
 import { Screen } from '@/components/screen';
 import { StatBar } from '@/components/stat-bar';
 import { BREEDS, resolveBreed } from '@/constants/pet';
@@ -36,6 +37,7 @@ import {
 } from '@/lib/game';
 import { objectParticle } from '@/lib/korean';
 import { usePet } from '@/lib/pet';
+import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
 const SAD_BELOW = 25;
@@ -77,6 +79,16 @@ export default function GameScreen() {
 
   /** 성장 축하 연출. 성장한 순간에만 채워집니다. */
   const [grewInto, setGrewInto] = useState<Stage | null>(null);
+
+  /**
+   * 방금 떠나온 단계. 성장 연출이 끝난 뒤 "기념 사진 남길까요?"를 띄우는 데 씁니다.
+   *
+   * 축하 연출 안에 질문을 넣지 않은 이유 — GrowthOverlay는 pointerEvents="none"에
+   * 1.5초 뒤 스스로 사라집니다. 조작을 막지 않으려고 그렇게 만든 것이라, 거기에
+   * 예/아니오를 넣으면 성격이 정반대가 됩니다. 축하는 그대로 흘려보내고,
+   * 사라진 자리에 남는 카드로 물어봅니다 — 2초 안에 결정하라고 몰지 않습니다.
+   */
+  const [keepsakeOf, setKeepsakeOf] = useState<Stage | null>(null);
 
   /**
    * 진행 중인 돌봄. 버튼을 누르면 곧바로 끝나지 않고 여기에 들어가고,
@@ -121,6 +133,8 @@ export default function GameScreen() {
 
     // 성장은 말풍선 한 줄로 지나가면 아까워서 별도 연출로 띄웁니다.
     if (result.grewInto) setGrewInto(result.grewInto);
+    // 떠나온 모습은 지금이 아니면 다시 볼 수 없습니다. 연출이 끝나면 물어봅니다.
+    if (result.grewFrom) setKeepsakeOf(result.grewFrom);
   }
 
   /**
@@ -158,6 +172,31 @@ export default function GameScreen() {
 
     const streakText = patStreakReaction(patStreak.current);
     showResult(streakText ? { ...result, message: streakText } : result, 'pat', '💗');
+  }
+
+  /**
+   * 방금 떠나온 모습으로 기념 사진을 만들러 갑니다.
+   *
+   * 넘기는 건 네 가지입니다 — 품종, **떠나온** 단계, 사용자가 올린 사진,
+   * 그리고 그 둘로 만든 문장. 단계는 pet에서 다시 읽으면 안 됩니다.
+   * 그때는 이미 자란 뒤라 새 단계가 나옵니다(CareResult.grewFrom 참고).
+   */
+  function goToKeepsake(from: Stage) {
+    if (!pet) return;
+
+    const { prompt, caption } = buildKeepsakePrompt(pet.breed, from.id);
+    setKeepsakeOf(null);
+
+    router.push({
+      pathname: '/photo-gen',
+      params: {
+        breed: pet.breed,
+        stage: from.id,
+        photoUri: pet.photoUri ?? '',
+        prompt,
+        caption,
+      },
+    });
   }
 
   /**
@@ -324,6 +363,53 @@ export default function GameScreen() {
           />
         </View>
       </View>
+
+      {/*
+        성장 연출이 완전히 끝난 뒤에만 띄웁니다(grewInto가 비워진 다음).
+        축하가 뜨는 동안 뒤에서 같이 나타나면 둘 다 제대로 안 읽힙니다.
+      */}
+      {keepsakeOf && !grewInto ? (
+        <View style={[styles.keepsake, { backgroundColor: c.surface, borderColor: c.primary }]}>
+          {/* 무엇을 남기는지 말로만 설명하면 안 와닿습니다. 떠나온 모습을
+              그대로 다시 그려서 보여줍니다 — 캐릭터가 SVG라 가능한 일입니다. */}
+          <PetCharacter breed={pet.breed} stage={keepsakeOf.id} animation="breathe" size={68} />
+
+          <View style={styles.keepsakeText}>
+            <Text style={[styles.keepsakeTitle, { color: c.text }]}>
+              {keepsakeOf.label} 모습, 남겨둘까요?
+            </Text>
+            <Text style={[styles.keepsakeBody, { color: c.textSecondary }]}>
+              올린 사진과 함께 기념 사진으로 만들어 드려요.
+            </Text>
+
+            <View style={styles.keepsakeButtons}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => goToKeepsake(keepsakeOf)}
+                style={({ pressed }) => [
+                  styles.keepsakeButton,
+                  { backgroundColor: c.primary, borderColor: c.primary },
+                  pressed && styles.carePressed,
+                ]}>
+                <Text style={[styles.keepsakeButtonText, { color: c.surface }]}>사진 남기기</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setKeepsakeOf(null)}
+                style={({ pressed }) => [
+                  styles.keepsakeButton,
+                  { borderColor: c.border },
+                  pressed && styles.carePressed,
+                ]}>
+                <Text style={[styles.keepsakeButtonText, { color: c.textSecondary }]}>
+                  괜찮아요
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
 
       {isPackingBags(pet) ? (
         // 떠나기 전에 반드시 경고합니다. 예고 없이 사라지면 버그로 보입니다.
@@ -705,6 +791,43 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: FontSize.caption,
     fontWeight: '600',
+  },
+  keepsake: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginTop: Spacing.md,
+    borderWidth: 2,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  keepsakeText: {
+    flex: 1,
+    gap: 2,
+  },
+  keepsakeTitle: {
+    fontSize: FontSize.caption,
+    fontWeight: '800',
+  },
+  keepsakeBody: {
+    fontSize: FontSize.caption,
+  },
+  keepsakeButtons: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  keepsakeButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderRadius: Radius.sm,
+    paddingVertical: Spacing.xs,
+    alignItems: 'center',
+  },
+  keepsakeButtonText: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
   },
   wish: {
     flexDirection: 'row',

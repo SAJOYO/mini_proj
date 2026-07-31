@@ -741,6 +741,15 @@ export type CareResult = {
   message: string;
   /** 이 돌봄으로 단계가 올랐으면 그 단계. */
   grewInto: Stage | null;
+  /**
+   * 이 돌봄으로 단계가 올랐으면 **떠나온** 단계. 안 올랐으면 null.
+   *
+   * 성장한 뒤에는 pet만 봐서는 이전 모습을 알 수 없습니다(stageOf는 이미 새
+   * 단계를 돌려줍니다). 캐릭터는 stage.id로 그 자리에서 그리는 SVG라, 이 값만
+   * 있으면 방금 지나간 모습을 그대로 다시 그릴 수 있습니다 — 성장 기념 사진이
+   * 이걸 씁니다.
+   */
+  grewFrom: Stage | null;
   /** 이 돌봄으로 소원을 들어줬는지. 화면에서 보너스 연출에 씁니다. */
   wishGranted: boolean;
   /** 채워준 스탯. 거절됐거나 쓰다듬기면 null. 파티클을 어디에 띄울지 정할 때 씁니다. */
@@ -764,6 +773,7 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
       applied: false,
       message: '지금은 여행 중이에요',
       grewInto: null,
+      grewFrom: null,
       wishGranted: false,
       stat: null,
       gainedExp: 0,
@@ -777,6 +787,7 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
       applied: false,
       message: '이제는 곁에 있어주기만 해도 돼요',
       grewInto: null,
+      grewFrom: null,
       wishGranted: false,
       stat: null,
       gainedExp: 0,
@@ -789,6 +800,7 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
       applied: false,
       message: action.refusal,
       grewInto: null,
+      grewFrom: null,
       wishGranted: false,
       stat: null,
       gainedExp: 0,
@@ -826,6 +838,7 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
       ? `${action.wishGrantedReaction} (+${GameConfig.wishBonusExp} EXP)`
       : action.reaction,
     grewInto: after.id === before.id ? null : after,
+    grewFrom: after.id === before.id ? null : before,
     wishGranted: granted,
     stat: action.stat,
     gainedExp,
@@ -864,6 +877,7 @@ export function applyPat(
       applied: false,
       message: '지금은 여행 중이에요',
       grewInto: null,
+      grewFrom: null,
       wishGranted: false,
       stat: null,
       gainedExp: 0,
@@ -877,6 +891,7 @@ export function applyPat(
       applied: true,
       message: pickOne(ELDER_PAT_REACTIONS, rand),
       grewInto: null,
+      grewFrom: null,
       wishGranted: false,
       stat: null,
       gainedExp: 0,
@@ -890,6 +905,7 @@ export function applyPat(
       applied: true,
       message: pickOne(PAT_FULL_REACTIONS, rand),
       grewInto: null,
+      grewFrom: null,
       wishGranted: false,
       stat: null,
       gainedExp: 0,
@@ -915,6 +931,7 @@ export function applyPat(
     applied: true,
     message: pickOne(PAT_REACTIONS, rand),
     grewInto: after.id === before.id ? null : after,
+    grewFrom: after.id === before.id ? null : before,
     wishGranted: false,
     stat: 'happiness',
     gainedExp,
