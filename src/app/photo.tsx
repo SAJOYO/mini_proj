@@ -209,7 +209,11 @@ export default function PhotoScreen() {
             },
           ]}>
           {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.preview} contentFit="cover" />
+            // contain 입니다 — 잘라내지 않고 사진 전체를 보여줍니다.
+            // 웹에서는 피커의 1:1 자르기(allowsEditing)가 동작하지 않아서 원본
+            // 비율 그대로 들어옵니다. cover 로 두면 세로 사진의 위아래가, 가로
+            // 사진의 좌우가 잘려서 "이 사진으로 판정된다"와 화면이 어긋납니다.
+            <Image source={{ uri: photoUri }} style={styles.preview} contentFit="contain" />
           ) : (
             <View style={styles.slotEmpty}>
               <Text style={styles.slotIcon}>📷</Text>
