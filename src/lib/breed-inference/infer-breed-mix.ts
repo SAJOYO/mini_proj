@@ -5,7 +5,11 @@ import type {
   InferBreedMixResult,
   VisionLlmClient,
 } from '@/lib/breed-inference/types';
-import { BreedMixValidationError, parseBreedMixResponse } from '@/lib/breed-inference/validate';
+import {
+  BreedMixValidationError,
+  extractDisplayText,
+  parseBreedMixResponse,
+} from '@/lib/breed-inference/validate';
 
 /**
  * 유효한 응답을 받기까지 시도할 최대 횟수 (첫 시도 1회 + 재시도 2회).
@@ -52,8 +56,14 @@ export async function inferBreedMix(
     });
 
     try {
+      // mix 는 엄격하게, 표시용 텍스트는 관대하게 읽습니다.
+      // 근거 문장이 빠졌다고 재시도를 돌리면 3회를 다 쓰고 판정이 통째로 실패합니다.
+      const mix = resolveMix(parseBreedMixResponse(raw));
+      const { face, reasons } = extractDisplayText(raw);
       return {
-        mix: resolveMix(parseBreedMixResponse(raw)),
+        mix,
+        face,
+        reasons,
         elapsedMs: Date.now() - startedAt,
         attempts: attempt,
       };

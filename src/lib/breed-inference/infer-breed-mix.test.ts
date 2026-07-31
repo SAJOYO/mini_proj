@@ -10,7 +10,7 @@ const VALID = {
   mix: [
     { breed: 'doberman', ratio: 55 },
     { breed: 'greyhound', ratio: 30 },
-    { breed: 'pointer', ratio: 15 },
+    { breed: 'beagle', ratio: 15 },
   ],
 };
 

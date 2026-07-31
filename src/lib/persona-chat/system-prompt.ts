@@ -102,6 +102,9 @@ const KNOWN_TOPICS: Record<AnimationName, string> = {
   yawn: '졸린 것',
   sleep: '자는 것',
   wagTail: '기분이 좋은 것',
+  // 게임에서 아바타를 누르면 재생되는 동작입니다. 돌봄과 달리 사용자가
+  // 아무 이유 없이 해주는 것이라, 캐릭터에게는 "예뻐해줬다"에 가깝습니다.
+  wagSlow: '쓰다듬어주는 것',
   droop: '아프거나 기운이 없는 것',
 };
 
@@ -209,6 +212,9 @@ export function strategyBlock(card: PersonaCard): string {
     ...voiceLines(card).map((line) => `- ${line}`),
     '',
     '# 출력',
+    // 통합 브랜치(feat/integration-v1)에서 온 줄입니다. 옛 구조에서는 공통
+    // 규칙에 있었는데, 형식은 맨 뒤라야 이긴다는 실측에 따라 이리로 옮깁니다.
+    '- 한국어로만 말해라.',
     '- 지문은 *별표* 안에, 한 응답에 하나만, 한 구절로.',
     '- 말은 길어도 3~4문장. 짧게 끝나도 된다. 서술은 지문 하나뿐이다.',
     '- 반말로 해라. 이모지·내부 태그를 쓰지 마라.',
