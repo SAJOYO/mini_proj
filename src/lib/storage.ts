@@ -14,6 +14,7 @@ const Keys = {
   user: '@pet/user',
   photoUri: '@pet/photoUri',
   pet: '@pet/pet',
+  photoJob: '@pet/photoJob',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -78,4 +79,36 @@ export async function savePet(pet: unknown): Promise<void> {
 
 export async function clearPet(): Promise<void> {
   await AsyncStorage.removeItem(Keys.pet);
+}
+
+/**
+ * 진행 중인 사진 생성 작업의 접수증.
+ *
+ * 사진 자체는 여기 넣지 않습니다 — 이미지는 lib/album.ts(IndexedDB)에 있고,
+ * 여기에는 "어떤 작업을 기다리는 중인지"만 둡니다. 몇 십 바이트짜리 정보라
+ * AsyncStorage에 맞습니다.
+ *
+ * 이걸 저장해두는 이유는 **새로고침 때문**입니다. 생성이 몇 분 걸려서 그
+ * 사이에 탭을 새로 고치는 일이 생기는데, 접수증이 남아 있으면 다시 열었을 때
+ * 결과를 되찾을 수 있습니다(ComfyUI가 히스토리를 들고 있습니다).
+ */
+export type PhotoJob = {
+  /** 어떤 사진인지 (품종:단계). lib/album.ts의 키와 같습니다. */
+  key: string;
+  /** ComfyUI가 준 접수증. */
+  promptId: string;
+  /** 시작 시각(ms). 너무 오래된 작업을 버리는 데 씁니다. */
+  startedAt: number;
+};
+
+export async function loadPhotoJob(): Promise<PhotoJob | null> {
+  return readJson<PhotoJob>(Keys.photoJob);
+}
+
+export async function savePhotoJob(job: PhotoJob): Promise<void> {
+  await writeJson(Keys.photoJob, job);
+}
+
+export async function clearPhotoJob(): Promise<void> {
+  await AsyncStorage.removeItem(Keys.photoJob);
 }

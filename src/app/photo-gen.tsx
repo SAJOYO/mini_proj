@@ -9,8 +9,8 @@ import { Screen } from '@/components/screen';
 import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { canDownload, downloadBlob, fetchBlob, loadPhoto, photoKey, savePhoto } from '@/lib/album';
-import { ComfyError, generate, type GenerateStep } from '@/lib/comfy';
+import { canDownload, downloadBlob, loadPhoto, photoKey } from '@/lib/album';
+import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
 
 /**
  * 사진 만들기 화면.
@@ -37,15 +37,16 @@ import { ComfyError, generate, type GenerateStep } from '@/lib/comfy';
  */
 
 /** 기다리는 동안 보여줄 안내. 단계가 넘어가는 게 보여야 멈춘 것처럼 안 느껴집니다. */
-const STEP_TEXT: Record<GenerateStep, string> = {
+const STEP_TEXT: Partial<Record<JobStatus, string>> = {
   uploading: '사진을 보내는 중...',
-  queued: '순서를 기다리는 중...',
-  generating: '그림을 그리는 중...',
+  waiting: '그림을 그리는 중...',
+  saving: '거의 다 됐어요...',
 };
 
 export default function PhotoGenScreen() {
   const c = useTheme();
   const router = useRouter();
+  const job = usePhotoJob();
 
   const params = useLocalSearchParams<{
     breed?: string;
@@ -62,23 +63,12 @@ export default function PhotoGenScreen() {
   const prompt = typeof params.prompt === 'string' && params.prompt ? params.prompt : null;
   const caption = typeof params.caption === 'string' ? params.caption : null;
 
-  const [step, setStep] = useState<GenerateStep | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  /** 보관함에서 꺼냈거나 방금 넣은 사진. 다운로드 버튼이 이걸 씁니다. */
-  const [blob, setBlob] = useState<Blob | null>(null);
-  /** 보관까지 끝났는지. 안내 문구만 바꿉니다(실패해도 사진은 보입니다). */
-  const [kept, setKept] = useState(false);
-
   const key = photoKey(breed, stage);
+  const busy = isRunning(job, key);
 
-  /**
-   * 화면을 떠난 뒤에도 폴링이 계속 도는 것을 막습니다.
-   *
-   * 생성은 수십 초가 걸려서, 기다리다 뒤로 가는 일이 흔합니다. 그때
-   * setState를 하면 이미 사라진 화면을 갱신하게 됩니다.
-   */
-  const abort = useRef<AbortController | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  /** 보관함에서 꺼낸 사진. 내려받기 버튼이 이걸 씁니다. */
+  const [blob, setBlob] = useState<Blob | null>(null);
 
   /**
    * 화면에 띄우려고 만든 blob: URL.
@@ -87,93 +77,50 @@ export default function PhotoGenScreen() {
    * 남습니다. 한 장이 1MB가 넘어서 다시 만들 때마다 쌓이면 부담이 됩니다.
    */
   const objectUrl = useRef<string | null>(null);
-
-  function show(next: Blob) {
-    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-    objectUrl.current = URL.createObjectURL(next);
-    setBlob(next);
-    setResult(objectUrl.current);
-  }
-
   useEffect(() => {
     return () => {
-      abort.current?.abort();
       if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
     };
   }, []);
 
   /**
-   * 전에 만들어 둔 사진이 있으면 꺼내옵니다.
+   * 보관함에 있는 사진을 꺼내 옵니다.
    *
-   * 이게 있어서 생성 서버가 꺼져 있어도, 앱을 껐다 켜도 사진이 남습니다.
-   * 없으면 그냥 빈 화면입니다 — 자동으로 만들지는 않습니다(한 장에 몇 분씩
-   * 걸리고 GPU를 쓰는 일이라 사용자가 눌러서 시작해야 합니다).
+   * 화면에 들어올 때 한 번, 그리고 작업이 끝났을 때 한 번 더 봅니다.
+   * (생성 자체는 lib/photo-job.tsx가 하고, 끝나면 보관함에 넣어둡니다)
+   *
+   * 자동으로 새로 만들지는 않습니다 — 한 장에 몇 분씩 걸리고 GPU를 쓰는
+   * 일이라 사용자가 눌러서 시작해야 합니다.
    */
   useEffect(() => {
     let alive = true;
     loadPhoto(key).then((saved) => {
       if (!alive || !saved) return;
-      show(saved);
-      setKept(true);
+      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+      objectUrl.current = URL.createObjectURL(saved);
+      setBlob(saved);
+      setResult(objectUrl.current);
     });
     return () => {
       alive = false;
     };
-  }, [key]);
+  }, [key, job.status]);
 
-  const busy = step !== null;
+  /** 이 화면을 봤으면 게임 화면의 완성 배지는 지웁니다. */
+  useEffect(() => {
+    if (job.unseen === key) job.seen();
+  }, [job, key]);
+
   // 재료가 하나라도 없으면 부를 수가 없습니다. 원인을 나눠서 안내합니다.
   const missing = !photoUri ? '사진' : !prompt ? '프롬프트' : null;
+  // 다른 사진을 만드는 중이면 GPU가 하나뿐이라 줄을 서게 됩니다.
+  const otherBusy = job.key !== null && job.key !== key && isRunning(job, job.key);
+  const error = job.key === key ? job.error : null;
+  const kept = blob !== null;
 
-  async function run() {
+  function run() {
     if (!photoUri || !prompt) return;
-
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
-
-    setError(null);
-    setResult(null);
-    setBlob(null);
-    setKept(false);
-    setStep('uploading');
-
-    try {
-      const url = await generate({
-        photoUri,
-        prompt,
-        signal: controller.signal,
-        onStep: setStep,
-      });
-      if (controller.signal.aborted) return;
-
-      // 서버 URL을 그대로 쓰지 않고 받아 옵니다. 그래야 생성 서버가 꺼져도,
-      // 와이파이를 벗어나도 사진이 남습니다.
-      const bytes = await fetchBlob(url);
-      if (controller.signal.aborted) return;
-
-      if (!bytes) {
-        // 받아오지 못했어도 사진은 보여줍니다. 서버가 살아있는 동안은
-        // 이 주소가 유효하니까요. 다만 보관은 안 된 상태입니다.
-        setResult(url);
-        setError('사진을 보관하지 못했어요. 서버를 끄면 사라집니다.');
-        return;
-      }
-
-      show(bytes);
-      setKept(await savePhoto(key, bytes));
-    } catch (e) {
-      if (controller.signal.aborted) return;
-      // ComfyError는 사용자에게 보여줄 문장을 따로 들고 있습니다.
-      // 그 외(네트워크 끊김 등)는 서버 주소부터 의심하는 게 보통 맞습니다.
-      setError(
-        e instanceof ComfyError
-          ? e.hint
-          : '사진 생성 서버에 연결하지 못했어요. 서버가 켜져 있는지 확인해 주세요.',
-      );
-    } finally {
-      if (!controller.signal.aborted) setStep(null);
-    }
+    void job.start({ key, photoUri, prompt });
   }
 
   return (
@@ -215,16 +162,19 @@ export default function PhotoGenScreen() {
           아래 버튼들이 밀려나지 않게 합니다.
         */}
         <View style={[styles.stage, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
-          {result ? (
-            <Image source={{ uri: result }} style={styles.resultImage} contentFit="cover" />
-          ) : busy ? (
+          {busy ? (
+            // 다시 만드는 중이면 전에 만든 사진 대신 진행 상황을 보여줍니다.
             <View style={styles.stageCenter}>
               <ActivityIndicator color={c.primary} />
-              <Text style={[styles.stageText, { color: c.textSecondary }]}>{STEP_TEXT[step]}</Text>
+              <Text style={[styles.stageText, { color: c.textSecondary }]}>
+                {STEP_TEXT[job.status] ?? '준비 중...'}
+              </Text>
               <Text style={[styles.stageHint, { color: c.textSecondary }]}>
-                한 장에 3~4분쯤 걸려요. 화면을 켜둔 채 기다려 주세요
+                한 장에 3~4분쯤 걸려요.{'\n'}돌아가서 놀고 있어도 계속 만들어집니다
               </Text>
             </View>
+          ) : result ? (
+            <Image source={{ uri: result }} style={styles.resultImage} contentFit="cover" />
           ) : (
             <View style={styles.stageCenter}>
               <Text style={styles.stageIcon}>🖼️</Text>
@@ -249,14 +199,21 @@ export default function PhotoGenScreen() {
             올린 사진을 찾을 수 없어요. 사진 화면에서 다시 골라 주세요.
           </Text>
         ) : null}
+
+        {otherBusy ? (
+          // 서버의 GPU가 하나라 작업은 한 번에 하나씩만 돕니다.
+          <Text style={[styles.message, { color: c.textSecondary }]}>
+            다른 사진을 만드는 중이에요. 끝나면 이어서 만들 수 있습니다.
+          </Text>
+        ) : null}
       </ScrollView>
 
       <View style={styles.actions}>
         <Button
           label={result ? '다시 만들기' : '사진 만들기'}
-          onPress={() => void run()}
+          onPress={run}
           loading={busy}
-          disabled={missing !== null}
+          disabled={missing !== null || otherBusy}
         />
         {/*
           보관함과 다운로드는 역할이 다릅니다. 보관함은 앱 안에서 다시 보기
@@ -271,12 +228,11 @@ export default function PhotoGenScreen() {
             disabled={busy}
           />
         ) : null}
-        <Button
-          label="돌아가기"
-          variant="secondary"
-          onPress={() => router.back()}
-          disabled={busy}
-        />
+        {/*
+          생성 중에도 나갈 수 있습니다. 기다리는 일은 lib/photo-job.tsx가
+          화면 밖에서 하고 있어서, 나가도 결과가 버려지지 않습니다.
+        */}
+        <Button label="돌아가기" variant="secondary" onPress={() => router.back()} />
       </View>
     </Screen>
   );

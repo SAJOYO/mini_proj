@@ -1,6 +1,14 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { ActivityBar } from '@/components/activity-bar';
 import { Button } from '@/components/button';
@@ -37,6 +45,7 @@ import {
 } from '@/lib/game';
 import { objectParticle } from '@/lib/korean';
 import { usePet } from '@/lib/pet';
+import { isRunning, usePhotoJob } from '@/lib/photo-job';
 import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
@@ -60,6 +69,7 @@ export default function GameScreen() {
   const { user } = useAuth();
   const { pet, isLoading, hatch, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
     usePet();
+  const photoJob = usePhotoJob();
 
   const params = useLocalSearchParams<{ breed?: string; photoUri?: string }>();
   // 링크로 들어온 문자열이라 그대로 믿지 않고 아는 품종인지 확인합니다.
@@ -280,6 +290,9 @@ export default function GameScreen() {
   }
 
   const stage = stageOf(pet);
+  // 사진은 화면 밖에서 만들어집니다. 여기서는 카메라 버튼 모양만 바꿉니다.
+  const photoBusy = photoJob.key !== null && isRunning(photoJob, photoJob.key);
+  const photoReady = photoJob.unseen !== null;
   const progress = progressToNext(pet);
   const ending = endingOf(pet);
   const days = daysTogether(pet);
@@ -313,15 +326,29 @@ export default function GameScreen() {
           {/*
             성장을 기다리지 않고 **지금 모습으로** 사진을 만드는 자리입니다.
             성장 직후 배너(goToKeepsake)와 달리 여기서는 지금 단계를 넘깁니다.
+
+            사진이 만들어지는 동안에도 이 화면에서 계속 놀 수 있습니다.
+            진행 상황은 lib/photo-job.tsx가 화면 밖에서 들고 있어서, 여기서는
+            돌고 있는지(spinner)와 다 됐는지(빨간 점)만 보여주면 됩니다.
           */}
           <Pressable
             onPress={() => goToKeepsake(stage)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="사진 만들기"
+            accessibilityLabel={
+              photoBusy ? '사진 만드는 중' : photoReady ? '사진 완성됨' : '사진 만들기'
+            }
             style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={styles.photoIcon}>📷</Text>
-            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>사진 만들기</Text>
+            {photoBusy ? (
+              // 이모지와 자리를 맞춰서 도는 동안 버튼 폭이 흔들리지 않게 합니다.
+              <ActivityIndicator size="small" color={c.primary} style={styles.photoSpinner} />
+            ) : (
+              <Text style={styles.photoIcon}>📷</Text>
+            )}
+            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>
+              {photoBusy ? '만드는 중' : '사진 만들기'}
+            </Text>
+            {photoReady ? <View style={[styles.photoDot, { backgroundColor: c.primary }]} /> : null}
           </Pressable>
         </View>
       </View>
@@ -751,11 +778,22 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
-    // 아직 동작하지 않는 자리라는 걸 눌러보기 전에 알 수 있게 눌러 둡니다.
-    opacity: 0.55,
   },
   photoIcon: {
     fontSize: 15,
+  },
+  photoSpinner: {
+    width: 15,
+    height: 15,
+  },
+  /** 완성됐는데 아직 안 본 사진이 있다는 표시. */
+  photoDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
   },
   photoLabel: {
     fontSize: FontSize.caption,

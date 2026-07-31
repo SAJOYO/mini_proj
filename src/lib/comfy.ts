@@ -41,9 +41,11 @@ const NODES = {
  * 실측으로 한 장에 **약 3분 40초**가 걸렸습니다(192.168.0.93, steps 10).
  * 앞에 대기 중인 작업이 있으면 그만큼 더 걸리므로 넉넉히 잡되, 무한정
  * 기다리지는 않게 해서 서버가 죽었을 때 화면이 영영 도는 것을 막습니다.
+ *
+ * 실제로 재는 쪽은 lib/photo-job.tsx입니다. 이 파일은 값만 들고 있습니다.
  */
-const TIMEOUT_MS = 10 * 60 * 1000;
-const POLL_INTERVAL_MS = 1500;
+export const TIMEOUT_MS = 10 * 60 * 1000;
+export const POLL_INTERVAL_MS = 1500;
 
 /** 서버 주소가 없거나 응답이 이상할 때 화면에 그대로 보여줄 수 있는 에러. */
 export class ComfyError extends Error {
@@ -195,74 +197,17 @@ type HistoryEntry = {
 };
 
 /**
- * 큐에 넣은 작업이 끝날 때까지 기다립니다.
+ * 작업 하나를 큐에 넣습니다.
  *
- * 웹소켓 대신 폴링을 씁니다 — 진행률을 실시간으로 보여주지 않아도 되는
- * 화면이라, 연결이 끊겼을 때 복구가 필요 없는 쪽이 훨씬 단순합니다.
- */
-async function waitForResult(promptId: string, signal?: AbortSignal): Promise<string> {
-  const deadline = Date.now() + TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw new ComfyError('사용자가 취소했습니다', '사진 만들기를 멈췄어요.');
-
-    const res = await fetch(`${baseUrl()}/history/${promptId}`);
-    if (res.ok) {
-      const history = (await res.json()) as Record<string, HistoryEntry>;
-      const entry = history[promptId];
-
-      if (entry?.status?.status_str === 'error') {
-        throw new ComfyError(
-          `워크플로 실행 실패 (${promptId})`,
-          '사진을 만드는 중에 서버에서 문제가 생겼어요.',
-        );
-      }
-
-      // outputs가 생겼으면 끝난 것입니다.
-      if (entry?.outputs) {
-        const url = firstImageUrl(entry.outputs);
-        if (url) return url;
-      }
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-  }
-
-  throw new ComfyError(
-    `시간 초과 (${TIMEOUT_MS}ms)`,
-    '사진 만들기가 너무 오래 걸려요. 서버 상태를 확인해 주세요.',
-  );
-}
-
-/** generate()가 알려주는 진행 단계. 화면의 안내 문구를 바꾸는 데 씁니다. */
-export type GenerateStep = 'uploading' | 'queued' | 'generating';
-
-export type GenerateOptions = {
-  /** 사용자가 올린 원본 사진의 로컬 URI. */
-  photoUri: string;
-  /** 생성 프롬프트. 영문입니다 — lib/photo-prompt.ts 참고. */
-  prompt: string;
-  onStep?: (step: GenerateStep) => void;
-  signal?: AbortSignal;
-};
-
-/**
- * 사진 한 장을 만듭니다.
+ * **결과를 기다리지 않고** 접수증(prompt_id)만 돌려줍니다. 기다리는 일은
+ * lib/photo-job.tsx가 화면 밖에서 합니다 — 그래야 사용자가 다른 화면으로
+ * 가도, 새로고침을 해도 생성이 이어집니다.
  *
- * 돌려주는 것은 ComfyUI의 /view URL입니다. `<Image source={{ uri }}>`에 그대로
- * 넣으면 보입니다. 다만 **그 서버가 켜져 있는 동안만 유효한 주소**라,
- * 오래 남겨야 하는 사진이면 화면 쪽에서 따로 받아 두어야 합니다.
+ * prompt_id는 저장해 두면 나중에 checkResult()로 결과를 되찾을 수 있습니다.
+ * ComfyUI가 히스토리를 들고 있어서, 앱이 잠시 안 보고 있어도 괜찮습니다.
  */
-export async function generate({
-  photoUri,
-  prompt,
-  onStep,
-  signal,
-}: GenerateOptions): Promise<string> {
-  onStep?.('uploading');
+export async function submit(photoUri: string, prompt: string): Promise<string> {
   const imageName = await uploadImage(photoUri);
-
-  onStep?.('queued');
   const workflow = buildWorkflow(imageName, prompt);
 
   const res = await fetch(`${baseUrl()}/prompt`, {
@@ -288,6 +233,40 @@ export async function generate({
     throw new ComfyError('prompt_id가 없습니다', '사진 생성 요청 결과가 이상해요.');
   }
 
-  onStep?.('generating');
-  return waitForResult(promptId, signal);
+  return promptId;
+}
+
+/** checkResult()의 답. 아직이면 pending입니다. */
+export type CheckResult =
+  { state: 'pending' } | { state: 'done'; url: string } | { state: 'error'; hint: string };
+
+/**
+ * 접수증으로 결과를 한 번 확인합니다.
+ *
+ * 던지지 않습니다 — 폴링 중 한 번 실패하는 것(와이파이가 잠깐 끊기는 등)은
+ * 흔한 일이라, 그걸로 작업 전체를 실패시키면 안 됩니다. 확인이 안 되면
+ * pending으로 두고 다음 차례에 다시 물어봅니다.
+ */
+export async function checkResult(promptId: string): Promise<CheckResult> {
+  let entry: HistoryEntry | undefined;
+
+  try {
+    const res = await fetch(`${baseUrl()}/history/${promptId}`);
+    if (!res.ok) return { state: 'pending' };
+    entry = ((await res.json()) as Record<string, HistoryEntry>)[promptId];
+  } catch {
+    return { state: 'pending' };
+  }
+
+  if (entry?.status?.status_str === 'error') {
+    return { state: 'error', hint: '사진을 만드는 중에 서버에서 문제가 생겼어요.' };
+  }
+
+  // outputs가 생겼으면 끝난 것입니다.
+  if (entry?.outputs) {
+    const url = firstImageUrl(entry.outputs);
+    if (url) return { state: 'done', url };
+  }
+
+  return { state: 'pending' };
 }
