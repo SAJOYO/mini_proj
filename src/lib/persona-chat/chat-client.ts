@@ -1,6 +1,6 @@
 import type { PersonaCard } from '@/lib/persona';
 import { ChatCompletionsClient } from '@/lib/llm/client';
-import { systemPrompt } from '@/lib/persona-chat/system-prompt';
+import { systemPrompt, type SpeciesKind } from '@/lib/persona-chat/system-prompt';
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
@@ -8,6 +8,8 @@ export type ReplyInput = {
   model: string;
   card: PersonaCard;
   name: string;
+  /** 기본값 'dog'. 개 견종 데이터만 있는 지금은 대부분 이 기본값으로 동작한다. */
+  species?: SpeciesKind;
   /** 지금까지의 대화. 오래된 것부터. */
   history: ChatTurn[];
 };
@@ -53,8 +55,8 @@ export class ChatCompletionsPersonaClient implements PersonaChatClient {
     this.maxTokens = maxTokens;
   }
 
-  async reply({ model, card, name, history }: ReplyInput): Promise<string> {
-    const system = systemPrompt(card, name).map((block) => ({
+  async reply({ model, card, name, species, history }: ReplyInput): Promise<string> {
+    const system = systemPrompt(card, name, species).map((block) => ({
       role: 'system' as const,
       content: block.text,
     }));

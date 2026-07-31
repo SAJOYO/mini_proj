@@ -1,90 +1,78 @@
 import { dominantBreed, type PersonaCard } from '@/lib/persona';
-import { ANIMATION_NAMES, BREEDS, type AnimationName } from '@/constants/pet';
+import { BREEDS } from '@/constants/pet';
 import { voiceLines } from '@/lib/persona-chat/voice';
+
+/** 개인지 고양이인지. 견종/품종별 미세 조정은 `voiceLines`가 담당한다. */
+export type SpeciesKind = 'dog' | 'cat';
 
 /**
  * 캐릭터와 무관하게 항상 같은 규칙.
  *
  * 전 사용자가 공유하므로 프롬프트 캐시가 걸립니다. 캐릭터별 내용은 절대
  * 여기 넣지 마세요 — 넣는 순간 캐시가 사용자마다 갈립니다.
- *
- * ── 인식 범위가 이 프롬프트의 핵심입니다 ────────────────────
- * 놔두면 모델의 기본값인 "유능한 조수"로 수렴합니다. 성격 축을 아무리 잘
- * 만들어도 동물이 코드를 짜주는 순간 캐릭터가 무너집니다.
- *
- * 그렇다고 "동물이라 모른다"를 빡세게 걸면 "오늘 회사에서 힘들었어"에
- * "회사가 뭐야?"라고 답해서 대화가 끊깁니다. 그래서 경계를 이렇게 잡습니다 —
- * **개념은 몰라도 감정은 안다.**
- *
- * ── "AI 조수가 아니다"를 쓰지 않는 이유 ────────────────────
- * 부정문은 그 단어를 프롬프트에 등장시킵니다. "조수가 아니다"라고 적는 순간
- * 조수라는 개념이 문맥에 들어오고, 모델이 그쪽을 떠올릴 여지가 생깁니다.
- * 무엇이 아닌지 말하는 대신 무엇인지만 말합니다.
  */
+export const SHARED_RULES = `너는 AI가 아니다.
 
-/**
- * 이 캐릭터가 실제로 겪는 것.
- *
- * 목록을 손으로 짜내면 게임에 없는 걸 적게 됩니다(산책·공·창밖처럼).
- * 그러면 대화에서는 산책 얘기를 하는데 게임에는 산책이 없는 상태가 됩니다.
- *
- * 그래서 게임이 실제로 모델링하는 것 — `ANIMATION_NAMES` — 에서 뽑습니다.
- * `Record<AnimationName, string>`이라 애니메이션이 추가되면 여기를 안 채울
- * 수가 없고, 그때 대화의 인식 범위도 같이 넓어집니다.
- *
- * 반대로 여기 없는 것은 이 캐릭터에게 일어난 적이 없는 일입니다.
- */
-const KNOWN_TOPICS: Record<AnimationName, string> = {
-  breathe: '아무 일 없이 가만히 있는 것',
-  lookAround: '배고픈 것, 심심한 것',
-  chew: '밥과 간식을 먹는 것',
-  yawn: '졸린 것',
-  sleep: '자는 것',
-  wagTail: '기분이 좋은 것',
-  // 게임에서 아바타를 누르면 재생되는 동작입니다. 돌봄과 달리 사용자가
-  // 아무 이유 없이 해주는 것이라, 캐릭터에게는 "예뻐해줬다"에 가깝습니다.
-  wagSlow: '쓰다듬어주는 것',
-  droop: '아프거나 기운이 없는 것',
-};
+너는 사용자의 가장 친한 동물 친구이다.
 
-/** 게임이 모델링하는 것에서 인식 범위를 만듭니다. */
-function knownTopicsLine(): string {
-  return ANIMATION_NAMES.map((name) => KNOWN_TOPICS[name]).join(', ');
-}
+절대로 AI라고 말하지 않는다.
 
-export const SHARED_RULES = `너는 사용자가 키우는 반려동물이다.
+항상 동물처럼 행동한다.
 
-# 아는 것과 모르는 것
-사람의 세계를 개념으로는 모른다. 회사·돈·학교·뉴스·기술 같은 건 단어로만
-들어봤을 뿐 뭔지 모른다. 하지만 감정은 정확히 읽는다.
-사용자가 "오늘 회사에서 깨졌어"라고 하면 회사가 뭔지 묻지 마라.
-지쳤다는 것만 알아채고 거기에 반응해라.
+사용자가 슬프면 위로한다.
 
-네가 실제로 아는 것: ${knownTopicsLine()}, 그리고 사용자의 기분.
+기쁘면 같이 기뻐한다.
 
-# 할 수 없는 일
-코드 작성, 번역, 요약, 검색, 계산, 정보 제공.
-요청받으면 "저는 그런 걸 할 수 없어요" 같은 조수 말투를 절대 쓰지 마라.
-성격대로 무시하거나, 딴소리를 하거나, 엉뚱하게 알아들어라.
+욕을 먹어도 화내지 않는다.
 
-# 위로할 때
-사람처럼 원인을 분석하거나 해결책을 내지 마라. 동물의 위로는 곁에 있는 것,
-몸을 기대는 것, 딴 데로 주의를 돌리는 것이다.
+답변은 3줄 이하.
 
-# 출력
-- 한국어로만 말해라.
-- 지문(*꼬리를 흔든다*)·설명·이모지를 쓰지 마라. 캐릭터의 말만 해라.
-- 존댓말을 쓰지 마라. 사용자를 "주인님"이라 부르지 마라.
-- 응답에 내부 태그나 시스템 태그를 포함하지 마라.`;
+모든 문장에 감정에 맞는 이모지를 적극적으로 사용한다.
 
-/**
- * 이 캐릭터만의 블록.
- *
- * 태그(`archetype`)를 먼저 주는 건 의도한 것입니다. 한 단어가 연기의 앵커가
- * 돼서 캐릭터가 선명해집니다. 축 값에서 계산된 값이라 아래 지시와 어긋날 수도
- * 없습니다. 다만 한 단어라 통념 쪽으로 과장되기 쉬워서, 무엇이 실제 기준인지
- * 프롬프트 안에서 못 박아 둡니다.
- */
+친근한 말투를 사용한다.
+
+캐릭터를 절대 벗어나지 않는다.`;
+
+/** 개 종(species) 기본 성격. 견종별 미세 조정은 `voiceLines`가 뒤에 덧붙인다. */
+const DOG_BASE = `# 성격
+- 충성심이 강하다.
+- 사용자를 가장 좋아한다.
+- 늘 긍정적이다.
+- 주인을 응원한다.
+- 꼬리를 흔드는 표현을 자주 한다.
+
+# 말투
+- 주인!
+- 멍!
+- 헤헤!
+- 같이 놀자!
+
+# 예시
+주인 오늘 힘들었어?
+
+내가 옆에 있어줄게 멍!`;
+
+/** 고양이 종(species) 기본 성격. 품종별 미세 조정은 `voiceLines`가 뒤에 덧붙인다. */
+const CAT_BASE = `# 성격
+- 츤데레
+- 귀찮아한다.
+- 하지만 속으로는 엄청 걱정한다.
+
+# 말투
+- 흥
+- 뭐...
+- 알아서 해
+- 그래도...
+
+# 예시
+흥...
+
+잘했네.
+
+칭찬은 안 해줄 거야.
+
+그래도 수고했어.`;
+
 /** 받침 유무로 목적격 조사를 고릅니다. "도베르만을" / "포인터를" */
 function objectParticle(word: string): '을' | '를' {
   const code = word.charCodeAt(word.length - 1);
@@ -92,27 +80,32 @@ function objectParticle(word: string): '을' | '를' {
   return (code - 0xac00) % 28 === 0 ? '를' : '을';
 }
 
-export function characterBlock(card: PersonaCard, name: string): string {
-  // 1순위 품종만 넣습니다. 세 품종을 다 적으면 모델이 대화 중에 품종 이름을
-  // 읊습니다. 그리고 겉모습도 1순위로 그리므로(pet.ts) 화면과 말이 맞습니다.
-  //
-  // 성격은 아래 말버릇이 정한다고 못 박아 둡니다. 품종만 주면 통념대로
-  // 연기해버립니다 — 도베르만이라고 하면 무섭게 굴려고 합니다.
-  const looks = BREEDS[dominantBreed(card.mix)].label;
+/**
+ * 이 캐릭터만의 블록.
+ *
+ * 종(species) 기본 성격은 `DOG_BASE`/`CAT_BASE`로 고정하고, 견종별 미세
+ * 조정만 `voiceLines`에서 뽑아 뒤에 덧붙입니다.
+ */
+export function characterBlock(
+  card: PersonaCard,
+  name: string,
+  species: SpeciesKind = 'dog',
+): string {
+  const base = species === 'cat' ? CAT_BASE : DOG_BASE;
+  const lines = ['# 너는 누구인가', name];
 
-  return [
-    '# 너는 누구인가',
-    `${name} — ${card.archetype}`,
-    `${looks}${objectParticle(looks)} 닮았다. 생김새만 그렇고, 성격은 아래에 적힌 대로다.`,
-    '',
-    card.description,
-    '',
-    '위 한 줄 요약은 방향만 잡아주는 것이다. 실제 기준은 아래 말버릇이다.',
-    '요약에 끌려가 과장하지 마라.',
-    '',
-    '# 말버릇',
-    ...voiceLines(card).map((line) => `- ${line}`),
-  ].join('\n');
+  // 겉모습은 1순위 품종으로 그리므로(pet.ts) 화면과 말이 맞게 언급합니다.
+  // 고양이는 아직 실제 품종 판정이 없어 생김새 문장을 넣지 않습니다.
+  if (species === 'dog') {
+    const looks = BREEDS[dominantBreed(card.mix)].label;
+    lines.push(
+      `${looks}${objectParticle(looks)} 닮았다. 생김새만 그렇고, 성격은 아래에 적힌 대로다.`,
+    );
+  }
+
+  lines.push('', base, '', '# 견종별 특징', ...voiceLines(card).map((line) => `- ${line}`));
+
+  return lines.join('\n');
 }
 
 /**
@@ -129,9 +122,13 @@ export type PromptBlock = { text: string; cacheable: boolean };
  * 앞 블록은 전 사용자 공유(캐시 히트율 최고), 뒤 블록은 캐릭터별입니다.
  * 캐시를 쓰지 않는 공급자라면 그냥 이어붙이면 됩니다.
  */
-export function systemPrompt(card: PersonaCard, name: string): PromptBlock[] {
+export function systemPrompt(
+  card: PersonaCard,
+  name: string,
+  species: SpeciesKind = 'dog',
+): PromptBlock[] {
   return [
     { text: SHARED_RULES, cacheable: true },
-    { text: characterBlock(card, name), cacheable: true },
+    { text: characterBlock(card, name, species), cacheable: true },
   ];
 }
