@@ -181,9 +181,6 @@ export default function ChatScreen() {
       { role: 'user', content: text },
     ];
 
-    // 공백 감지용 — 이번 메시지를 붙이기 전의 마지막 시각입니다.
-    // 몇 시간 만의 첫 메시지면 캐릭터가 "어디 갔었어"부터 시작합니다.
-    const lastMessageAt = messages[messages.length - 1]?.createdAt ?? null;
     const nowIso = new Date().toISOString();
 
     setMessages((prev) => [
@@ -194,13 +191,7 @@ export default function ChatScreen() {
     void appendMessage(petIdRef.current, { role: 'user', content: text });
 
     try {
-      const answer = await client.reply({
-        model: CHAT.model,
-        card,
-        name: petName,
-        history,
-        lastMessageAt,
-      });
+      const answer = await client.reply({ model: CHAT.model, card, name: petName, history });
       setMessages((prev) => [
         ...prev,
         {

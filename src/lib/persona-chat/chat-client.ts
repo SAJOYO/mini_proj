@@ -1,6 +1,6 @@
 import type { PersonaCard } from '@/lib/persona';
 import { ChatCompletionsClient } from '@/lib/llm/client';
-import { nowBlock, systemPrompt } from '@/lib/persona-chat/system-prompt';
+import { systemPrompt } from '@/lib/persona-chat/system-prompt';
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
@@ -10,12 +10,6 @@ export type ReplyInput = {
   name: string;
   /** 지금까지의 대화. 오래된 것부터. */
   history: ChatTurn[];
-  /**
-   * 직전 메시지의 시각(ISO). 캐릭터가 공백을 감지하는 데 씁니다 —
-   * 몇 시간 만의 첫 메시지면 "어디 갔었어"가 저절로 나옵니다.
-   * 안 넘기면 시간대(아침/낮/저녁/밤)만 압니다.
-   */
-  lastMessageAt?: string | null;
 };
 
 /** 공급자별 요청 형식을 이 인터페이스 뒤로 숨깁니다. */
@@ -72,20 +66,14 @@ export class ChatCompletionsPersonaClient implements PersonaChatClient {
     this.maxTokens = maxTokens;
   }
 
-  async reply({ model, card, name, history, lastMessageAt }: ReplyInput): Promise<string> {
-    // 시간 블록은 매 요청 변하므로 맨 뒤에 붙입니다(cacheable: false).
-    // 앞의 캐시 가능한 블록들이 프리픽스 캐시를 유지합니다.
-    const blocks = [
-      ...systemPrompt(card, name),
-      nowBlock(new Date(), lastMessageAt ? new Date(lastMessageAt) : null),
-    ];
-
-    // system 메시지는 **하나로 합쳐** 보냅니다. 블록별로 나눠 보냈더니
-    // 시간 블록을 4번째로 추가한 순간 캐릭터가 통째로 무너졌습니다 —
+  async reply({ model, card, name, history }: ReplyInput): Promise<string> {
+    // system 메시지는 **하나로 합쳐** 보냅니다. 블록별 system 메시지 여러
+    // 개로 보냈더니 4번째 블록을 추가한 순간 캐릭터가 통째로 무너졌습니다 —
     // "저는 당신의 질문을 기다리며, 도움을 드릴 수 있도록" (조수 존댓말,
-    // 지문 없음, 시간 언급만 정확). 서버가 다중 system 을 전부 읽는다는
-    // 보장이 없고(마지막 것만 유효하면 프롬프트가 "낮이다" 두 줄이 됩니다),
-    // 단일 system 은 모든 공급자에서 뜻이 같습니다.
+    // 지문 없음). 다중 system 의 처리는 규격에 정의가 없어 서버 재량이고
+    // (마지막 것만 유효하면 프롬프트가 두 줄짜리가 됩니다), 단일 system 은
+    // 모든 공급자에서 뜻이 같습니다. 블록 구조는 캐시 경계 정보로만 씁니다.
+    const blocks = systemPrompt(card, name);
     const system = { role: 'system' as const, content: blocks.map((b) => b.text).join('\n\n') };
 
     const text = await this.client.complete({
