@@ -337,31 +337,44 @@ export type StageId = 'baby' | 'teen' | 'young' | 'elder';
 export type Stage = {
   id: StageId;
   label: string;
-  /** 아바타 크기(px). 단계가 오를수록 커집니다. */
+  /** 아바타 크기(px). 단계가 달라도 같은 값입니다 — AVATAR_SIZE 설명 참고. */
   avatarSize: number;
   /** 이 단계에 도달하기 위한 누적 경험치. elder는 경험치가 아니라 일수로 갑니다. */
   minExp: number;
 };
 
+/**
+ * 아바타가 차지하는 자리의 크기(px). **네 단계가 모두 같습니다.**
+ *
+ * 예전에는 단계가 오를수록 키웠는데(96 → 120 → 144), 그러면 성장할 때마다
+ * 아바타 자리의 높이가 달라져서 스탯 게이지와 돌봄 버튼이 통째로 위아래로
+ * 밀립니다. 같은 화면인데 단계마다 배치가 달라 보이고, 성장한 순간에는
+ * 누르려던 버튼이 옮겨가 있습니다.
+ *
+ * 자란 것은 크기가 아니라 **생김새**로 보여줍니다 — 머리·몸·귀·발의 비율은
+ * constants/pet.ts의 LIFE_STAGES가 단계별로 조정합니다.
+ */
+export const AVATAR_SIZE = 144;
+
 export const STAGES: readonly Stage[] = [
-  { id: 'baby', label: '영유아기', avatarSize: 96, minExp: 0 },
+  { id: 'baby', label: '영유아기', avatarSize: AVATAR_SIZE, minExp: 0 },
   {
     id: 'teen',
     label: '청소년기',
-    avatarSize: 120,
+    avatarSize: AVATAR_SIZE,
     minExp: GameConfig.expToTeen,
   },
   {
     id: 'young',
     label: '청년기',
-    avatarSize: 144,
+    avatarSize: AVATAR_SIZE,
     minExp: GameConfig.expToYoung,
   },
   // 노년기는 경험치가 아니라 함께한 일수로 진입합니다 (minExp는 청년기와 동일).
   {
     id: 'elder',
     label: '노년기',
-    avatarSize: 144,
+    avatarSize: AVATAR_SIZE,
     minExp: GameConfig.expToYoung,
   },
 ];
