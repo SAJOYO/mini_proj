@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { bytesToBase64, mimeTypeOf } from '@/lib/image';
+import { bytesToBase64, mimeTypeOf, survivesReload } from '@/lib/image';
 
 /**
  * base64 인코더는 직접 짠 것이라(`Buffer`는 node 전용, `btoa`는 RN에 있다는
@@ -63,4 +63,19 @@ test('확장자를 알 수 없으면 jpeg 로 본다', () => {
   assert.equal(mimeTypeOf('file:///tmp/photo'), 'image/jpeg');
   assert.equal(mimeTypeOf('file:///tmp/a.jpg?t=1700000000'), 'image/jpeg');
   assert.equal(mimeTypeOf('file:///tmp/a.heic'), 'image/jpeg');
+});
+
+test('blob: URI 는 새로고침을 못 넘긴다', () => {
+  // 저장소에서 복원하면 안 되는 것 — 문자열만 남고 데이터가 사라집니다.
+  assert.equal(survivesReload('blob:http://localhost:8081/abc-123'), false);
+
+  // 복원해도 되는 것
+  assert.equal(survivesReload('file:///data/user/0/.../photo.jpg'), true);
+  assert.equal(survivesReload('data:image/png;base64,iVBORw0KGgo='), true);
+  assert.equal(survivesReload('ph://ABC-DEF'), true);
+
+  // 애초에 저장된 게 없는 경우
+  assert.equal(survivesReload(null), false);
+  assert.equal(survivesReload(undefined), false);
+  assert.equal(survivesReload(''), false);
 });

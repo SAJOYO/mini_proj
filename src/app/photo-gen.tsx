@@ -8,6 +8,7 @@ import { Screen } from '@/components/screen';
 import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { survivesReload } from '@/lib/image';
 
 /**
  * 사진 만들기 화면 — **자리만 잡아둔 임시 화면입니다.**
@@ -32,6 +33,8 @@ import { useTheme } from '@/hooks/use-theme';
  *
  * ⚠️ 웹에서 photoUri는 blob: URI라 탭을 닫으면 무효가 됩니다(README 참고).
  *    새로고침 뒤에는 원본이 사라져 있을 수 있으니 없을 때를 처리해 주세요.
+ *    아래에서 `survivesReload`로 걸러 "사진 없음"으로 떨어뜨려 뒀습니다.
+ *    생성을 붙일 때도 이 경우엔 부르지 말고 다시 올려달라고 하는 편이 낫습니다.
  */
 export default function PhotoGenScreen() {
   const c = useTheme();
@@ -48,7 +51,9 @@ export default function PhotoGenScreen() {
   // 링크로 들어온 문자열이라 그대로 믿지 않고 아는 값인지 확인합니다.
   const breed = resolveBreed(params.breed);
   const stage = resolveStage(params.stage);
-  const photoUri = typeof params.photoUri === 'string' && params.photoUri ? params.photoUri : null;
+  // 죽은 blob: 을 <Image>에 넘기면 깨진 칸이 뜨므로(콘솔에 ERR_FILE_NOT_FOUND)
+  // 아예 "사진 없음"으로 봅니다.
+  const photoUri = survivesReload(params.photoUri) ? (params.photoUri as string) : null;
 
   return (
     <Screen>

@@ -38,6 +38,26 @@ export function mimeTypeOf(uri: string): VisionImageInput['mimeType'] {
   return (extension && MIME_BY_EXTENSION[extension]) || 'image/jpeg';
 }
 
+/**
+ * 이 URI 가 앱을 새로 띄운 뒤에도 살아 있는가.
+ *
+ * 웹에서 이미지 피커는 `blob:` URI 를 줍니다. 이건 그 문서(탭)에만 존재해서
+ * 새로고침하거나 탭을 닫으면 **문자열만 남고 가리키는 데이터가 사라집니다.**
+ * 그런데 저장소에는 문자열이 그대로 남아 있어서, 복원하면 "사진이 있다"고
+ * 착각하게 됩니다.
+ *
+ * 실제로 그래서 두 가지가 생겼습니다.
+ *   1. 콘솔에 net::ERR_FILE_NOT_FOUND (죽은 blob 을 <Image> 가 읽으려다)
+ *   2. 화면은 사진이 있는 것처럼 보이는데 [분석하기]를 누르면 실패
+ *      (피커가 준 base64 는 메모리에만 있어서 새로고침하면 없습니다)
+ *
+ * 네이티브에서는 `file://` 경로라 그대로 살아 있습니다. 그래서 형태로 가릅니다.
+ */
+export function survivesReload(uri: string | null | undefined): boolean {
+  if (!uri) return false;
+  return !uri.startsWith('blob:');
+}
+
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 /**

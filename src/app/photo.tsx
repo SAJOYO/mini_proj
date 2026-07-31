@@ -9,7 +9,7 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { toVisionImage } from '@/lib/image';
+import { survivesReload, toVisionImage } from '@/lib/image';
 import { visionTarget } from '@/lib/llm/config';
 import { confirmAction, notify } from '@/lib/dialog';
 import { usePet } from '@/lib/pet';
@@ -49,8 +49,24 @@ export default function PhotoScreen() {
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    // 이전에 골라둔 사진이 있으면 복원 (base64 는 없으니 필요할 때 다시 읽습니다)
-    loadPhotoUri().then(setPhotoUri);
+    let cancelled = false;
+
+    // 이전에 골라둔 사진을 복원합니다. 단, 새로고침을 못 넘긴 URI 는 버립니다 —
+    // 웹의 blob: 은 문자열만 남고 데이터가 사라져서, 복원하면 사진이 있는 것처럼
+    // 보이는데 실제로는 못 읽습니다 (콘솔에 ERR_FILE_NOT_FOUND).
+    // 지우면 "눌러서 사진 고르기" 상태로 돌아가고, 다시 고르면 정상입니다.
+    loadPhotoUri().then(async (uri) => {
+      if (cancelled) return;
+      if (survivesReload(uri)) {
+        setPhotoUri(uri);
+      } else if (uri) {
+        await clearPhotoUri();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function applyResult(result: ImagePicker.ImagePickerResult) {
