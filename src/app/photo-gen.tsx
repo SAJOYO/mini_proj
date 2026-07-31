@@ -10,7 +10,10 @@ import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { canDownload, downloadBlob, latestOfStage, loadPhoto } from '@/lib/album';
+import { resolvePhoto } from '@/lib/image';
+import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
+import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /**
  * 사진 만들기 화면.
@@ -47,51 +50,36 @@ export default function PhotoGenScreen() {
   const c = useTheme();
   const router = useRouter();
   const job = usePhotoJob();
+  const { pet } = usePet();
 
-  const params = useLocalSearchParams<{
-    breed?: string;
-    stage?: string;
-    photoUri?: string;
-    prompt?: string;
-    caption?: string;
-  }>();
-
-  // 링크로 들어온 문자열이라 그대로 믿지 않고 아는 값인지 확인합니다.
-  const breed = resolveBreed(params.breed);
+  // 넘어오는 건 **단계 하나뿐**입니다. 품종·사진은 pet에서 직접 읽고 문장은
+  // 여기서 다시 만듭니다. 주소로 큰 값을 나르지 않기 위해서입니다
+  // (game.tsx의 goToKeepsake 주석 참고).
+  const params = useLocalSearchParams<{ stage?: string }>();
   const stage = resolveStage(params.stage);
-  const given = typeof params.photoUri === 'string' && params.photoUri ? params.photoUri : null;
-  const prompt = typeof params.prompt === 'string' && params.prompt ? params.prompt : null;
-  const caption = typeof params.caption === 'string' ? params.caption : '';
+
+  const breed = resolveBreed(pet?.breed);
+  const { prompt, caption } = buildKeepsakePrompt(breed, stage);
 
   const busy = isRunning(job, stage);
 
   /**
-   * 올린 사진을 지금 쓸 수 있는가.
+   * 올린 사진을 지금 쓸 수 있는 주소로 바꿉니다.
    *
-   * `survivesReload`를 쓰면 안 됩니다. 그건 "새로고침을 견디는가"를 묻는
-   * 것이라 웹의 blob: URI는 **살아 있어도** 무조건 false가 됩니다. 웹
-   * 사진 선택기는 항상 blob:을 주기 때문에, 방금 올린 사진까지 "없음"이
-   * 되어버립니다.
-   *
-   * 우리에게 필요한 건 "지금 읽을 수 있는가"라서 실제로 한 번 읽어봅니다.
-   * 새로고침으로 죽은 blob:은 여기서 걸러집니다.
+   * 웹에서는 저장된 값이 **열쇠**라 그대로는 못 씁니다(lib/image.ts 참고).
+   * IndexedDB에서 꺼내 주소를 만들어야 화면에 띄울 수 있습니다.
+   * 사진이 없거나 브라우저가 지웠으면 null이 되어 "사진 없음"으로 떨어집니다.
    */
-  const [deadBlob, setDeadBlob] = useState(false);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   useEffect(() => {
-    // blob: 이 아니면(file://·data: 등) 그 자리에 계속 있는 것들이라 확인이 필요 없습니다.
-    if (!given || !given.startsWith('blob:')) return;
-
-    let watching = true;
-    fetch(given)
-      .then((res) => watching && !res.ok && setDeadBlob(true))
-      .catch(() => watching && setDeadBlob(true));
-
+    let alive = true;
+    resolvePhoto(pet?.photoUri).then((uri) => {
+      if (alive) setPhotoUri(uri);
+    });
     return () => {
-      watching = false;
+      alive = false;
     };
-  }, [given]);
-
-  const photoUri = deadBlob ? null : given;
+  }, [pet?.photoUri]);
 
   /** 이 단계에서 마지막으로 만든 사진. 앨범에는 그 전 것들도 남아 있습니다. */
   const [latest, setLatest] = useState<Blob | null>(null);
