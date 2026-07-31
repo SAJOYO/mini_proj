@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { chatTarget } from '@/lib/llm/config';
 import { dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/persona';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
+import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
 import { loadAnalysis } from '@/lib/storage';
 
 /**
@@ -43,24 +45,44 @@ type Message = { id: string; role: 'user' | 'assistant'; content: string; failed
 /** 대화 설정. 모듈 최상위에서 한 번만 읽습니다. 키가 없으면 null 입니다. */
 const CHAT = chatTarget();
 
+/** 안내 문구가 스스로 사라지기까지. */
+const NOTICE_MS = 5000;
+
 export default function ChatScreen() {
   const c = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
 
   const [mix, setMix] = useState(DEFAULT_MIX);
+  const [analyzed, setAnalyzed] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  /**
+   * 입력창 위에 잠깐 뜨는 안내.
+   *
+   * 다시 시도하면 되는 오류(한도·네트워크)는 말풍선으로 남기지 않습니다.
+   * 남기면 대화 기록이 에러로 채워지고, 캐릭터가 그 말을 한 것처럼 보입니다.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
 
   // 중복 전송 차단은 ref 로 합니다. state 는 다음 렌더에야 바뀌므로 같은 틱에
   // 두 번 눌리면 둘 다 false 를 읽고 통과합니다.
   const busy = useRef(false);
   const scroller = useRef<ScrollView>(null);
 
+  /** 안내를 띄우고 잠시 뒤 스스로 사라지게 합니다. */
+  const showNotice = useCallback((text: string) => {
+    setNotice(text);
+    setTimeout(() => setNotice((current) => (current === text ? null : current)), NOTICE_MS);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     loadAnalysis().then((saved) => {
-      if (!cancelled && saved) setMix(resolveMix(saved.mix));
+      if (cancelled) return;
+      if (saved) setMix(resolveMix(saved.mix));
+      setAnalyzed(saved !== null);
     });
     return () => {
       cancelled = true;
@@ -85,20 +107,13 @@ export default function ChatScreen() {
     if (!text || busy.current) return;
 
     if (!client || !CHAT) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `err-${prev.length}`,
-          role: 'assistant',
-          failed: true,
-          content: 'API 키가 없어서 대답할 수 없어요. .env 를 확인해 주세요.',
-        },
-      ]);
+      showNotice(NO_CHAT_KEY);
       return;
     }
 
     busy.current = true;
     setSending(true);
+    setNotice(null);
     setDraft('');
 
     // 실패한 답은 히스토리에서 뺍니다. 에러 문구를 캐릭터가 한 말로
@@ -117,11 +132,19 @@ export default function ChatScreen() {
         { id: `a-${prev.length}`, role: 'assistant', content: answer },
       ]);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      setMessages((prev) => [
-        ...prev,
-        { id: `a-${prev.length}`, role: 'assistant', content: reason, failed: true },
-      ]);
+      // 원본은 화면에 뿌리지 않되 버리지도 않습니다. 개발 중에는 원인을 봐야 합니다.
+      console.warn('[chat] 요청 실패:', error);
+
+      const { text: message, retryable } = describeFailure(error);
+      if (retryable) {
+        // 다시 하면 되는 것은 안내로만. 대화 기록을 에러로 채우지 않습니다.
+        showNotice(message);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${prev.length}`, role: 'assistant', content: message, failed: true },
+        ]);
+      }
     } finally {
       busy.current = false;
       setSending(false);
@@ -152,11 +175,28 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: true })}>
-          {messages.length === 0 && (
-            <Text style={[styles.empty, { color: c.textSecondary }]}>
-              {petName}에게 말을 걸어보세요.
-            </Text>
-          )}
+          {messages.length === 0 &&
+            (analyzed ? (
+              <Text style={[styles.empty, { color: c.textSecondary }]}>
+                {petName}에게 말을 걸어보세요.
+              </Text>
+            ) : (
+              // 판정 전에는 중립 캐릭터라 성격이 없습니다. 왜 그런지 보여줍니다.
+              // 대화 자체는 막지 않습니다 — 막으면 챗봇팀이 개발할 때 불편합니다.
+              <View style={styles.emptyBox}>
+                <Text style={[styles.empty, { color: c.textSecondary }]}>
+                  아직 닮은 동물을 찾지 않았어요.{'\n'}
+                  사진을 올리면 그 아이의 성격으로 대화해요.
+                </Text>
+                <Pressable
+                  onPress={() => router.push('/photo')}
+                  style={[styles.emptyButton, { borderColor: c.primary }]}>
+                  <Text style={[styles.emptyButtonText, { color: c.primary }]}>
+                    사진 올리러 가기
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
 
           {messages.map((m) => (
             <View
@@ -192,11 +232,18 @@ export default function ChatScreen() {
           )}
         </ScrollView>
 
+        {/* 다시 하면 되는 오류는 여기에 잠깐 떴다 사라집니다. 대화 기록은 안 건드립니다. */}
+        {notice && (
+          <View style={[styles.notice, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
+            <Text style={[styles.noticeText, { color: c.textSecondary }]}>{notice}</Text>
+          </View>
+        )}
+
         <View style={[styles.composer, { backgroundColor: c.surface, borderColor: c.border }]}>
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder={CHAT ? '메시지를 입력하세요' : 'API 키가 없어요'}
+            placeholder={CHAT ? '메시지를 입력하세요' : '대화용 API 키가 필요해요'}
             placeholderTextColor={c.textSecondary}
             style={[styles.input, { color: c.text }]}
             returnKeyType="send"
@@ -262,6 +309,32 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     textAlign: 'center',
     marginTop: Spacing.xl,
+    lineHeight: 20,
+  },
+  emptyBox: {
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  emptyButton: {
+    borderWidth: 1.5,
+    borderRadius: Radius.pill,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  emptyButtonText: {
+    fontSize: FontSize.caption,
+    fontWeight: '700',
+  },
+  notice: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  noticeText: {
+    fontSize: FontSize.caption,
+    textAlign: 'center',
   },
   bubble: {
     maxWidth: '78%',
