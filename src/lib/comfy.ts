@@ -19,6 +19,7 @@
  */
 
 import workflowTemplate from './krea2_identity_edit.json';
+import { resolvePhoto } from '@/lib/image';
 
 /**
  * 앱이 값을 밀어 넣는 노드 번호.
@@ -93,7 +94,16 @@ export async function ping(): Promise<boolean> {
  * 꺼내야 하고(fetch로 한 번 읽습니다), 네이티브는 file:// 경로를 그대로
  * FormData에 얹으면 런타임이 알아서 읽어줍니다.
  */
-async function uploadImage(photoUri: string): Promise<string> {
+async function uploadImage(uri: string): Promise<string> {
+  // 웹에서는 사진이 IndexedDB에 있고 저장된 값은 열쇠뿐입니다. 실제 주소로 바꿉니다.
+  const photoUri = await resolvePhoto(uri);
+  if (!photoUri) {
+    throw new ComfyError(
+      `사진을 찾지 못했습니다: ${uri}`,
+      '올린 사진을 찾을 수 없어요. 사진을 다시 골라 주세요.',
+    );
+  }
+
   const form = new FormData();
 
   if (photoUri.startsWith('file://') || photoUri.startsWith('content://')) {

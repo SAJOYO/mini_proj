@@ -113,9 +113,114 @@ export async function toVisionImage(
   const mimeType = mimeTypeOf(uri);
   if (base64) return { mimeType, base64 };
 
-  const { File } = await import('expo-file-system');
-  const buffer = await new File(uri).arrayBuffer();
+  // 열쇠면 실제 주소로 바꿔서 읽습니다 (웹에서 새로고침한 뒤가 이 경우입니다).
+  const readable = (await resolvePhoto(uri)) ?? uri;
+
+  // 파일이 아닌 주소(blob:·data:)는 expo-file-system이 읽지 못합니다.
+  const buffer = readable.startsWith('file://')
+    ? await new (await import('expo-file-system')).File(readable).arrayBuffer()
+    : await (await fetch(readable)).arrayBuffer();
+
   return { mimeType, base64: bytesToBase64(new Uint8Array(buffer)) };
+}
+
+/**
+ * 웹에서 원본 사진을 담아두는 곳.
+ *
+ * ## 왜 저장소(localStorage)가 아니라 IndexedDB인가
+ *
+ * 웹에서 AsyncStorage는 localStorage입니다. **문자열만** 담기고 한도가 5MB인데,
+ * 사진을 문자열(data: URL)로 바꾸면 용량이 33% 늘고 로그인·캐릭터·판정 결과가
+ * 전부 같은 5MB를 나눠 씁니다. 사진 하나가 한도를 먹으면 **캐릭터 저장이 실패해
+ * 키우던 기록이 안 남습니다.**
+ *
+ * IndexedDB는 이진 데이터를 그대로 담고 한도가 수백 MB~GB라 이런 걱정이 없습니다.
+ * 원본을 줄이지 않아도 됩니다.
+ *
+ * ## 대신 주소가 아니라 열쇠를 저장합니다
+ *
+ * IndexedDB에 든 사진은 주소로 가리킬 수 없습니다. 그래서 저장소에는 PHOTO_KEY
+ * 라는 **열쇠 문자열**만 넣고, 실제로 쓸 때 resolvePhoto()로 꺼냅니다.
+ * 꺼낸 주소(blob:)는 그 탭에서만 유효하므로 저장하면 안 됩니다.
+ */
+const PHOTO_DB = 'pet-source-photo';
+const PHOTO_STORE = 'photo';
+
+/** 저장소에 남는 값. 이게 보이면 "사진은 IndexedDB에 있다"는 뜻입니다. */
+export const PHOTO_KEY = 'photo:source';
+
+/** 이번 탭에서 만들어 둔 주소. 꺼낼 때마다 새로 만들지 않게 들고 있습니다. */
+let resolvedUrl: string | null = null;
+
+function openPhotoDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(PHOTO_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(PHOTO_STORE)) {
+        request.result.createObjectStore(PHOTO_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function withPhotoStore<T>(
+  mode: IDBTransactionMode,
+  run: (store: IDBObjectStore) => IDBRequest<T>,
+): Promise<T | null> {
+  if (typeof indexedDB === 'undefined') return null;
+
+  try {
+    const db = await openPhotoDb();
+    return await new Promise<T | null>((resolve) => {
+      const tx = db.transaction(PHOTO_STORE, mode);
+      const request = run(tx.objectStore(PHOTO_STORE));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+      tx.onabort = () => resolve(null);
+      tx.oncomplete = () => db.close();
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** 웹에서 고른 사진을 IndexedDB에 넣습니다. 성공하면 열쇠를, 실패하면 null. */
+async function storePhotoBlob(blobUrl: string): Promise<string | null> {
+  try {
+    const blob = await (await fetch(blobUrl)).blob();
+    const saved = await withPhotoStore('readwrite', (store) => store.put(blob, PHOTO_STORE));
+    if (saved === null) return null;
+
+    // 새 사진으로 바뀌었으니 들고 있던 주소는 버립니다.
+    if (resolvedUrl) URL.revokeObjectURL(resolvedUrl);
+    resolvedUrl = blobUrl;
+
+    return PHOTO_KEY;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 저장된 값을 **지금 쓸 수 있는 주소로** 바꿉니다.
+ *
+ * 열쇠(PHOTO_KEY)면 IndexedDB에서 꺼내 주소를 만들고, 그 외(file:·data: 등)는
+ * 그대로 돌려줍니다. 사진을 화면에 띄우거나 서버에 올리기 직전에 부르세요.
+ *
+ * 꺼내지 못하면 null입니다 — 보관된 사진이 없거나 브라우저가 지운 경우입니다.
+ */
+export async function resolvePhoto(uri: string | null | undefined): Promise<string | null> {
+  if (!uri) return null;
+  if (uri !== PHOTO_KEY) return uri;
+  if (resolvedUrl) return resolvedUrl;
+
+  const blob = await withPhotoStore<Blob>('readonly', (store) => store.get(PHOTO_STORE));
+  if (!(blob instanceof Blob)) return null;
+
+  resolvedUrl = URL.createObjectURL(blob);
+  return resolvedUrl;
 }
 
 /**
@@ -134,12 +239,14 @@ export async function toVisionImage(
  * `survivesReload`는 이걸 못 걸러냅니다 — blob:이 아니라 file: 이라서
  * "살아 있다"고 보거든요. 경로가 캐시인지 아닌지는 구분하지 않습니다.
  *
- * ## 웹에서는 아무 일도 하지 않습니다
+ * ## 웹은 옮기는 게 아니라 IndexedDB에 넣습니다
  *
- * 웹의 blob: 은 파일이 아니라 탭 메모리에 있는 것이라 옮길 데가 없습니다.
- * 그대로 돌려주고, 죽었는지는 쓰는 쪽에서 확인합니다.
+ * 웹의 blob: 은 파일이 아니라 **탭 메모리**에 있는 것이라 옮길 데가 없습니다.
+ * 사진을 IndexedDB에 넣고 **열쇠(PHOTO_KEY)를 돌려줍니다.** 쓸 때는
+ * resolvePhoto()로 꺼냅니다.
  */
 export async function persistPhoto(uri: string): Promise<string> {
+  if (uri.startsWith('blob:')) return (await storePhotoBlob(uri)) ?? uri;
   if (!uri.startsWith('file://')) return uri;
 
   try {

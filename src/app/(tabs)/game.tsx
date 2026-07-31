@@ -47,7 +47,6 @@ import { objectParticle } from '@/lib/korean';
 import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob } from '@/lib/photo-job';
 import { loadAnalysis } from '@/lib/storage';
-import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
 const SAD_BELOW = 25;
@@ -205,19 +204,15 @@ export default function GameScreen() {
   function goToKeepsake(from: Stage) {
     if (!pet) return;
 
-    const { prompt, caption } = buildKeepsakePrompt(pet.breed, from.id);
     setKeepsakeOf(null);
 
-    router.push({
-      pathname: '/photo-gen',
-      params: {
-        breed: pet.breed,
-        stage: from.id,
-        photoUri: pet.photoUri ?? '',
-        prompt,
-        caption,
-      },
-    });
+    // 단계만 넘깁니다. 품종·사진은 저 화면이 pet에서 직접 읽고, 문장은 그 둘로
+    // 다시 만듭니다(buildKeepsakePrompt는 순수 함수라 어디서 불러도 같습니다).
+    //
+    // 예전에는 사진과 문장까지 실어 보냈는데, 그러면 **주소에 사진이 통째로
+    // 들어갑니다.** 웹에서 사진을 문자열로 저장하던 때 주소가 수십만 자로
+    // 불어났습니다. 화면 사이로 큰 값을 나르지 않는 편이 안전합니다.
+    router.push({ pathname: '/photo-gen', params: { stage: from.id } });
   }
 
   /**
