@@ -9,7 +9,13 @@ import { Screen } from '@/components/screen';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-import { persistPhoto, photoFileExists, survivesReload, toVisionImage } from '@/lib/image';
+import {
+  persistPhoto,
+  photoFileExists,
+  resolvePhoto,
+  survivesReload,
+  toVisionImage,
+} from '@/lib/image';
 import { visionTarget } from '@/lib/llm/config';
 import { confirmAction, notify } from '@/lib/dialog';
 import { usePet } from '@/lib/pet';
@@ -42,11 +48,32 @@ export default function PhotoScreen() {
   const { user, signOut } = useAuth();
   const { pet, hatch, release } = usePet();
 
+  /**
+   * 저장에 쓰는 값. 웹에서는 **열쇠**(photo:source)라 그대로 화면에 못 씁니다.
+   * 캐릭터(hatch)와 저장소에는 이 값이 들어갑니다.
+   */
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   // 피커가 준 base64. 저장소에는 넣지 않습니다(사진 한 장이 수 MB).
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+
+  /**
+   * 화면에 띄우는 데 쓰는 주소. 열쇠를 꺼낸 결과입니다.
+   *
+   * 저장용 값(photoUri)과 나눠 둔 이유 — 꺼낸 주소는 blob: 이라 **그 탭에서만**
+   * 유효합니다. 이걸 저장하면 새로고침 뒤에 죽은 주소가 남습니다.
+   */
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    resolvePhoto(photoUri).then((uri) => {
+      if (alive) setPreviewUri(uri);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [photoUri]);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,7 +240,11 @@ export default function PhotoScreen() {
           },
         ]}>
         {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.preview} contentFit="cover" />
+          <Image
+            source={{ uri: previewUri ?? undefined }}
+            style={styles.preview}
+            contentFit="cover"
+          />
         ) : (
           <View style={styles.slotEmpty}>
             <Text style={styles.slotIcon}>📷</Text>
