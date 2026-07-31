@@ -1,6 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { ActivityBar } from '@/components/activity-bar';
 import { Button } from '@/components/button';
@@ -37,6 +45,7 @@ import {
 } from '@/lib/game';
 import { objectParticle } from '@/lib/korean';
 import { usePet } from '@/lib/pet';
+import { isRunning, usePhotoJob } from '@/lib/photo-job';
 import { loadAnalysis } from '@/lib/storage';
 import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
@@ -61,6 +70,7 @@ export default function GameScreen() {
   const { user } = useAuth();
   const { pet, isLoading, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
     usePet();
+  const photoJob = usePhotoJob();
 
   /**
    * 판정이 남긴 얼굴 관찰. "왜 이 동물인가"를 보여주는 데만 씁니다.
@@ -185,11 +195,12 @@ export default function GameScreen() {
   }
 
   /**
-   * 방금 떠나온 모습으로 기념 사진을 만들러 갑니다.
+   * 기념 사진을 만들러 갑니다.
    *
-   * 넘기는 건 네 가지입니다 — 품종, **떠나온** 단계, 사용자가 올린 사진,
-   * 그리고 그 둘로 만든 문장. 단계는 pet에서 다시 읽으면 안 됩니다.
-   * 그때는 이미 자란 뒤라 새 단계가 나옵니다(CareResult.grewFrom 참고).
+   * 넘기는 건 네 가지입니다 — 품종, 단계, 사용자가 올린 사진, 그리고 그 둘로
+   * 만든 문장. **단계를 인자로 받는 것이 핵심입니다.** 성장 직후 배너에서
+   * 부를 때는 pet에서 다시 읽으면 안 됩니다. 그때는 이미 자란 뒤라 새 단계가
+   * 나옵니다(CareResult.grewFrom 참고). 헤더 버튼에서는 지금 단계를 넘깁니다.
    */
   function goToKeepsake(from: Stage) {
     if (!pet) return;
@@ -289,6 +300,9 @@ export default function GameScreen() {
   }
 
   const stage = stageOf(pet);
+  // 사진은 화면 밖에서 만들어집니다. 여기서는 카메라 버튼 모양만 바꿉니다.
+  const photoBusy = isRunning(photoJob);
+  const photoReady = photoJob.unseen !== null;
   const progress = progressToNext(pet);
   const ending = endingOf(pet);
   const days = daysTogether(pet);
@@ -326,24 +340,41 @@ export default function GameScreen() {
           </Pressable>
 
           {/*
-            TODO(김경빈): 이미지 생성 화면으로 넘어가는 자리입니다.
-            지금 키우는 캐릭터로 사진을 만들려면 세 가지가 필요합니다.
-              router.push({
-                pathname: '/photo-gen',
-                params: { breed: pet.breed, stage: stage.id, photoUri: pet.photoUri ?? '' },
-              })
-            breed는 한글 이름이 아니라 constants/pet.ts의 키입니다.
-            생성이 끝나면 결과 URI만 돌려주면 됩니다 — 게임 쪽은 안 건드려도 됩니다.
+            성장을 기다리지 않고 **지금 모습으로** 사진을 만드는 자리입니다.
+            성장 직후 배너(goToKeepsake)와 달리 여기서는 지금 단계를 넘깁니다.
+
+            사진이 만들어지는 동안에도 이 화면에서 계속 놀 수 있습니다.
+            진행 상황은 lib/photo-job.tsx가 화면 밖에서 들고 있어서, 여기서는
+            돌고 있는지(spinner)와 다 됐는지(빨간 점)만 보여주면 됩니다.
           */}
           <Pressable
-            onPress={() => {}}
-            disabled
+            onPress={() => goToKeepsake(stage)}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel="사진 만들기 (준비 중)"
+            accessibilityLabel={
+              photoBusy ? '사진 만드는 중' : photoReady ? '사진 완성됨' : '사진 만들기'
+            }
             style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={styles.photoIcon}>📷</Text>
-            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>사진 만들기</Text>
+            {photoBusy ? (
+              // 이모지와 자리를 맞춰서 도는 동안 버튼 폭이 흔들리지 않게 합니다.
+              <ActivityIndicator size="small" color={c.primary} style={styles.photoSpinner} />
+            ) : (
+              <Text style={styles.photoIcon}>📷</Text>
+            )}
+            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>
+              {photoBusy ? '만드는 중' : '사진 만들기'}
+            </Text>
+            {photoReady ? <View style={[styles.photoDot, { backgroundColor: c.primary }]} /> : null}
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push('/album')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="앨범 보기"
+            style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
+            <Text style={styles.photoIcon}>🖼️</Text>
+            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>앨범</Text>
           </Pressable>
         </View>
       </View>
@@ -808,11 +839,22 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 6,
-    // 아직 동작하지 않는 자리라는 걸 눌러보기 전에 알 수 있게 눌러 둡니다.
-    opacity: 0.55,
   },
   photoIcon: {
     fontSize: 15,
+  },
+  photoSpinner: {
+    width: 15,
+    height: 15,
+  },
+  /** 완성됐는데 아직 안 본 사진이 있다는 표시. */
+  photoDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
   },
   photoLabel: {
     fontSize: FontSize.caption,
