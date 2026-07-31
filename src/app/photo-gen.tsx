@@ -123,6 +123,19 @@ export default function PhotoGenScreen() {
     void job.start({ key, photoUri, prompt });
   }
 
+  /**
+   * 게임 화면으로 돌아갑니다.
+   *
+   * 그냥 back()을 부르면 **새로고침한 뒤에 터집니다.** 새로고침하면 앱 안의
+   * 화면 이력이 사라져서 돌아갈 곳이 없어지거든요("GO_BACK was not handled").
+   * 이 화면은 생성이 몇 분씩 걸려서 그 사이 새로고침하는 일이 흔하고,
+   * 링크로 바로 열고 들어오는 경우도 마찬가지입니다.
+   */
+  function goBack() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/game');
+  }
+
   return (
     <Screen>
       <Text style={[styles.title, { color: c.text }]}>사진 만들기</Text>
@@ -232,7 +245,7 @@ export default function PhotoGenScreen() {
           생성 중에도 나갈 수 있습니다. 기다리는 일은 lib/photo-job.tsx가
           화면 밖에서 하고 있어서, 나가도 결과가 버려지지 않습니다.
         */}
-        <Button label="돌아가기" variant="secondary" onPress={() => router.back()} />
+        <Button label="돌아가기" variant="secondary" onPress={goBack} />
       </View>
     </Screen>
   );
