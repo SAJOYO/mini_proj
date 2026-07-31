@@ -9,6 +9,7 @@ import { Screen } from '@/components/screen';
 import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { canDownload, downloadBlob, fetchBlob, loadPhoto, photoKey, savePhoto } from '@/lib/album';
 import { ComfyError, generate, type GenerateStep } from '@/lib/comfy';
 
 /**
@@ -64,6 +65,12 @@ export default function PhotoGenScreen() {
   const [step, setStep] = useState<GenerateStep | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** 보관함에서 꺼냈거나 방금 넣은 사진. 다운로드 버튼이 이걸 씁니다. */
+  const [blob, setBlob] = useState<Blob | null>(null);
+  /** 보관까지 끝났는지. 안내 문구만 바꿉니다(실패해도 사진은 보입니다). */
+  const [kept, setKept] = useState(false);
+
+  const key = photoKey(breed, stage);
 
   /**
    * 화면을 떠난 뒤에도 폴링이 계속 도는 것을 막습니다.
@@ -72,7 +79,47 @@ export default function PhotoGenScreen() {
    * setState를 하면 이미 사라진 화면을 갱신하게 됩니다.
    */
   const abort = useRef<AbortController | null>(null);
-  useEffect(() => () => abort.current?.abort(), []);
+
+  /**
+   * 화면에 띄우려고 만든 blob: URL.
+   *
+   * createObjectURL은 명시적으로 지워주지 않으면 탭이 닫힐 때까지 메모리에
+   * 남습니다. 한 장이 1MB가 넘어서 다시 만들 때마다 쌓이면 부담이 됩니다.
+   */
+  const objectUrl = useRef<string | null>(null);
+
+  function show(next: Blob) {
+    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+    objectUrl.current = URL.createObjectURL(next);
+    setBlob(next);
+    setResult(objectUrl.current);
+  }
+
+  useEffect(() => {
+    return () => {
+      abort.current?.abort();
+      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+    };
+  }, []);
+
+  /**
+   * 전에 만들어 둔 사진이 있으면 꺼내옵니다.
+   *
+   * 이게 있어서 생성 서버가 꺼져 있어도, 앱을 껐다 켜도 사진이 남습니다.
+   * 없으면 그냥 빈 화면입니다 — 자동으로 만들지는 않습니다(한 장에 몇 분씩
+   * 걸리고 GPU를 쓰는 일이라 사용자가 눌러서 시작해야 합니다).
+   */
+  useEffect(() => {
+    let alive = true;
+    loadPhoto(key).then((saved) => {
+      if (!alive || !saved) return;
+      show(saved);
+      setKept(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [key]);
 
   const busy = step !== null;
   // 재료가 하나라도 없으면 부를 수가 없습니다. 원인을 나눠서 안내합니다.
@@ -87,6 +134,8 @@ export default function PhotoGenScreen() {
 
     setError(null);
     setResult(null);
+    setBlob(null);
+    setKept(false);
     setStep('uploading');
 
     try {
@@ -97,7 +146,22 @@ export default function PhotoGenScreen() {
         onStep: setStep,
       });
       if (controller.signal.aborted) return;
-      setResult(url);
+
+      // 서버 URL을 그대로 쓰지 않고 받아 옵니다. 그래야 생성 서버가 꺼져도,
+      // 와이파이를 벗어나도 사진이 남습니다.
+      const bytes = await fetchBlob(url);
+      if (controller.signal.aborted) return;
+
+      if (!bytes) {
+        // 받아오지 못했어도 사진은 보여줍니다. 서버가 살아있는 동안은
+        // 이 주소가 유효하니까요. 다만 보관은 안 된 상태입니다.
+        setResult(url);
+        setError('사진을 보관하지 못했어요. 서버를 끄면 사라집니다.');
+        return;
+      }
+
+      show(bytes);
+      setKept(await savePhoto(key, bytes));
     } catch (e) {
       if (controller.signal.aborted) return;
       // ComfyError는 사용자에게 보여줄 문장을 따로 들고 있습니다.
@@ -173,6 +237,12 @@ export default function PhotoGenScreen() {
 
         {error ? <Text style={[styles.message, { color: c.primary }]}>{error}</Text> : null}
 
+        {kept ? (
+          <Text style={[styles.message, { color: c.textSecondary }]}>
+            이 기기에 보관했어요. 서버를 꺼도 다시 볼 수 있습니다.
+          </Text>
+        ) : null}
+
         {missing === '사진' ? (
           // 웹에서는 새로고침만 해도 blob: URI가 무효가 됩니다. 다시 고르게 안내합니다.
           <Text style={[styles.message, { color: c.textSecondary }]}>
@@ -188,6 +258,19 @@ export default function PhotoGenScreen() {
           loading={busy}
           disabled={missing !== null}
         />
+        {/*
+          보관함과 다운로드는 역할이 다릅니다. 보관함은 앱 안에서 다시 보기
+          위한 것이고 브라우저가 지울 수도 있지만, 내려받은 파일은 사용자
+          것이 됩니다. 그래서 보관에 성공했어도 버튼을 남겨둡니다.
+        */}
+        {blob && canDownload() ? (
+          <Button
+            label="내려받기"
+            variant="secondary"
+            onPress={() => downloadBlob(blob, `${breed}-${stage}.png`)}
+            disabled={busy}
+          />
+        ) : null}
         <Button
           label="돌아가기"
           variant="secondary"
