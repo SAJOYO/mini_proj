@@ -344,7 +344,7 @@ export type Stage = {
 };
 
 /**
- * 아바타가 차지하는 자리의 크기(px). **네 단계가 모두 같습니다.**
+ * 아바타 크기의 **상한**(px). 네 단계가 모두 같습니다.
  *
  * 예전에는 단계가 오를수록 키웠는데(96 → 120 → 144), 그러면 성장할 때마다
  * 아바타 자리의 높이가 달라져서 스탯 게이지와 돌봄 버튼이 통째로 위아래로
@@ -353,8 +353,14 @@ export type Stage = {
  *
  * 자란 것은 크기가 아니라 **생김새**로 보여줍니다 — 머리·몸·귀·발의 비율은
  * constants/pet.ts의 LIFE_STAGES가 단계별로 조정합니다.
+ *
+ * ## 왜 상한인가
+ *
+ * 실제 크기는 **화면 폭의 절반**입니다(components/pet-avatar.tsx). 고정값이면
+ * 작은 폰에서는 화면을 다 먹고 태블릿에서는 허전합니다. 다만 폭이 넓다고
+ * 끝없이 커지면 캐릭터만 덩그러니 남아서, 여기서 끊습니다.
  */
-export const AVATAR_SIZE = 144;
+export const AVATAR_SIZE = 200;
 
 export const STAGES: readonly Stage[] = [
   { id: 'baby', label: '영유아기', avatarSize: AVATAR_SIZE, minExp: 0 },
@@ -724,6 +730,29 @@ export function rollWish(
 
   const action = candidates[Math.floor(rand() * candidates.length)] ?? candidates[0];
   return { ...pet, wish: { actionId: action.id, askedAt: now } };
+}
+
+/**
+ * **발표 시연용.** 소원을 지금 당장 띄웁니다.
+ *
+ * rollWish 는 주기(1분)·확률(60%)·스탯 조건을 다 통과해야 소원을 냅니다.
+ * 기다리지 않고 보여주려면 그 조건들을 건너뛸 길이 필요합니다.
+ *
+ * 조건을 하나 남겨둡니다 — 바라는 스탯이 이미 가득 차 있으면 채워줄 수가
+ * 없습니다. 그대로 띄우면 "씻겨달라"면서 씻기기는 거절되는 모순이 되므로,
+ * 그 자리를 비워 소원을 들어줄 수 있게 만들어 둡니다.
+ */
+export function forceWish(pet: Pet, actionId: CareActionId, now: number = Date.now()): Pet {
+  const action = CARE_ACTIONS.find((a) => a.id === actionId);
+  if (!action) return pet;
+
+  const room = Math.min(pet.stats[action.stat], GameConfig.wishAskBelow - 1);
+
+  return {
+    ...pet,
+    stats: { ...pet.stats, [action.stat]: room },
+    wish: { actionId, askedAt: now },
+  };
 }
 
 /**

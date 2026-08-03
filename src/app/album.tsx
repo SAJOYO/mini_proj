@@ -12,11 +12,15 @@ import {
   downloadBlob,
   listPhotos,
   loadPhoto,
+  photoUri,
   removePhoto,
+  revokePhotoUri,
   type PhotoEntry,
 } from '@/lib/album';
 import { confirmAction } from '@/lib/dialog';
-import { STAGES } from '@/lib/game';
+import { STAGES, stageOf } from '@/lib/game';
+import { usePet } from '@/lib/pet';
+import { isRunning, usePhotoJob } from '@/lib/photo-job';
 
 /**
  * 앨범 — 지금까지 만든 사진을 성장 단계별로 모아 봅니다.
@@ -38,9 +42,24 @@ import { STAGES } from '@/lib/game';
 /** 화면에 살아 있는 blob: URL. 언마운트할 때 한꺼번에 정리합니다. */
 type Loaded = Record<string, string>;
 
+/**
+ * 사진을 받은 날. "2026. 8. 3." 처럼 씁니다.
+ *
+ * toLocaleDateString 을 쓰지 않는 건 기기마다 결과가 다르기 때문입니다 —
+ * 안드로이드 런타임은 Intl 데이터를 다 들고 있지 않아서, 같은 코드가 폰에서는
+ * 영어로 나오기도 합니다. 앨범에 날짜가 섞여 보이는 것보다는 직접 맞추는
+ * 편이 낫습니다.
+ */
+function shotDate(createdAt: number): string {
+  const at = new Date(createdAt);
+  return `${at.getFullYear()}. ${at.getMonth() + 1}. ${at.getDate()}.`;
+}
+
 export default function AlbumScreen() {
   const c = useTheme();
   const router = useRouter();
+  const { pet } = usePet();
+  const photoBusy = isRunning(usePhotoJob());
 
   const [entries, setEntries] = useState<PhotoEntry[] | null>(null);
   const [urls, setUrls] = useState<Loaded>({});
@@ -52,13 +71,14 @@ export default function AlbumScreen() {
   const [blobs, setBlobs] = useState<Record<string, Blob>>({});
 
   /**
-   * createObjectURL로 만든 주소는 명시적으로 지워야 사라집니다.
-   * 사진이 쌓일수록 커지는 값이라 화면을 떠날 때 반드시 정리합니다.
+   * 웹에서 만든 blob: 주소는 명시적으로 지워야 사라집니다. 사진이 쌓일수록
+   * 커지는 값이라 화면을 떠날 때 반드시 정리합니다.
+   * (폰의 file: 경로는 지울 것이 없습니다 — revokePhotoUri 가 알아서 거릅니다)
    */
   const created = useRef<string[]>([]);
   useEffect(() => {
     const urlList = created.current;
-    return () => urlList.forEach((url) => URL.revokeObjectURL(url));
+    return () => urlList.forEach(revokePhotoUri);
   }, []);
 
   useEffect(() => {
@@ -70,14 +90,20 @@ export default function AlbumScreen() {
 
       // 목록을 먼저 그려두고 이미지를 한 장씩 채웁니다.
       for (const entry of list) {
-        const blob = await loadPhoto(entry.id);
+        const uri = await photoUri(entry.id);
         if (!alive) return;
-        if (!blob) continue;
+        if (!uri) continue;
 
-        const url = URL.createObjectURL(blob);
-        created.current.push(url);
-        setBlobs((prev) => ({ ...prev, [entry.id]: blob }));
-        setUrls((prev) => ({ ...prev, [entry.id]: url }));
+        created.current.push(uri);
+        setUrls((prev) => ({ ...prev, [entry.id]: uri }));
+
+        // 내려받기 버튼이 있는 환경(웹)에서만 바이트까지 들고 있습니다.
+        // 폰에서는 쓰지도 않을 사진을 통째로 메모리에 올릴 이유가 없습니다.
+        if (canDownload()) {
+          const blob = await loadPhoto(entry.id);
+          if (!alive) return;
+          if (blob) setBlobs((prev) => ({ ...prev, [entry.id]: blob }));
+        }
       }
     });
 
@@ -156,10 +182,16 @@ export default function AlbumScreen() {
                           ) : null}
                         </View>
 
+                        {/*
+                          찍은 날을 적습니다. 예전에는 "영유아기의 마지막 날"
+                          같은 문구였는데, 어느 단계인지는 위 소제목이 이미
+                          말해주고 있어서 같은 말을 두 번 하는 셈이었습니다.
+                          앨범에서 궁금한 건 "언제 찍었나" 쪽입니다.
+                        */}
                         <Text
                           style={[styles.caption, { color: c.textSecondary }]}
                           numberOfLines={1}>
-                          {entry.caption || stage.label}
+                          {shotDate(entry.createdAt)}
                         </Text>
 
                         <View style={styles.shotActions}>
@@ -195,6 +227,24 @@ export default function AlbumScreen() {
       </ScrollView>
 
       <View style={styles.actions}>
+        {/*
+          사진을 만드는 입구. 예전에는 게임 화면 헤더에 따로 있었는데, 만든
+          사진이 쌓이는 곳이 여기라 입구도 여기로 옮겼습니다.
+
+          **지금 단계**로 만듭니다. 성장 직후에 뜨는 배너는 방금 떠나온 단계로
+          만드는데(그 모습은 다시 못 봅니다), 여기서는 그럴 이유가 없습니다.
+
+          캐릭터를 아직 안 만들었으면 만들 대상이 없어서 버튼을 감춥니다.
+        */}
+        {pet ? (
+          <Button
+            label={photoBusy ? '사진 만드는 중...' : '사진 찍기'}
+            onPress={() =>
+              router.push({ pathname: '/photo-gen', params: { stage: stageOf(pet).id } })
+            }
+            disabled={photoBusy}
+          />
+        ) : null}
         <Button label="돌아가기" variant="secondary" onPress={goBack} />
       </View>
     </Screen>
@@ -277,6 +327,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   actions: {
+    gap: Spacing.sm,
     paddingBottom: Spacing.md,
   },
 });

@@ -66,7 +66,12 @@ export function StatBar({ label, emoji, value, warnBelow = 30 }: StatBarProps) {
         />
       </View>
 
-      <Text style={[styles.value, { color: low ? c.danger : c.textSecondary }]}>
+      {/*
+        numberOfLines 는 칸이 모자랄 때 줄을 바꾸는 대신 잘라내라는 뜻입니다.
+        아래 width 로 세 자리는 들어가지만, 글꼴이 큰 기기에서까지 장담할 수는
+        없어서 안전장치로 둡니다 — 잘리는 편이 두 줄로 접히는 것보다 낫습니다.
+      */}
+      <Text style={[styles.value, { color: low ? c.danger : c.textSecondary }]} numberOfLines={1}>
         {Math.round(clamped)}
       </Text>
     </View>
@@ -98,7 +103,10 @@ const styles = StyleSheet.create({
   value: {
     fontSize: FontSize.caption,
     fontVariant: ['tabular-nums'],
-    width: 24,
+    // 세 자리("100")가 들어가는 너비. 24 였을 때 폰에서만 줄이 바뀌었습니다 —
+    // 웹은 글꼴 지표가 달라 아슬아슬하게 들어가서 티가 안 났습니다.
+    // 게이지(track)는 flex 라 여기서 늘린 만큼 알아서 줄어듭니다.
+    width: 30,
     textAlign: 'right',
   },
 });

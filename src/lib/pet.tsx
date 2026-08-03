@@ -16,6 +16,7 @@ import {
   applyPat,
   createPet,
   forceDeparture,
+  forceWish,
   normalizePet,
   rewindToBaby,
   setStats,
@@ -63,6 +64,8 @@ type PetContextValue = {
   forceStats: (value: number) => Promise<void>;
   /** 발표 시연용. 유예 시간을 기다리지 않고 바로 여행을 떠나게 합니다. */
   forceDepart: () => Promise<void>;
+  /** 발표 시연용. 고른 돌봄을 바라는 상태로 즉시 만듭니다. */
+  forceWish: (actionId: CareActionId) => Promise<void>;
 };
 
 const PetContext = createContext<PetContextValue | null>(null);
@@ -184,6 +187,15 @@ export function PetProvider({ children }: { children: ReactNode }) {
     await commit(forceDeparture(current));
   }, [commit]);
 
+  const forceWishNow = useCallback(
+    async (actionId: CareActionId) => {
+      const current = petRef.current;
+      if (!current) return;
+      await commit(forceWish(current, actionId));
+    },
+    [commit],
+  );
+
   const value = useMemo(
     () => ({
       pet,
@@ -196,8 +208,21 @@ export function PetProvider({ children }: { children: ReactNode }) {
       rewind,
       forceStats,
       forceDepart,
+      forceWish: forceWishNow,
     }),
-    [pet, isLoading, hatch, care, pat, release, skipStage, rewind, forceStats, forceDepart],
+    [
+      pet,
+      isLoading,
+      hatch,
+      care,
+      pat,
+      release,
+      skipStage,
+      rewind,
+      forceStats,
+      forceDepart,
+      forceWishNow,
+    ],
   );
 
   return <PetContext.Provider value={value}>{children}</PetContext.Provider>;
