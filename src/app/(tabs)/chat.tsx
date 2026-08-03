@@ -53,27 +53,56 @@ const NOTICE_MS = 5000;
 /** user?.nickname마저 없는(이론상 거의 없는) 경우에만 쓰는 최후 fallback. */
 const DEFAULT_PET_NAME = '닉네임';
 
-/** 이름이 없을 때 대화창에 먼저 띄우는 인사. 파싱 없이 결정적으로 동작하도록,
- * 이 말풍선 다음에 오는 사용자의 답을 그대로 이름으로 저장합니다(LLM 호출 없음). */
+/** 이름이 없을 때 대화창에 먼저 띄우는 인사. 이 말풍선 자체는 결정적으로
+ * 뜨지만, 그다음 사용자의 답은 매번 `extractPetName`으로 "진짜 이름을
+ * 지어주는 말인가"를 먼저 판단합니다 — 인사나 잡담을 이름으로 오인하지
+ * 않기 위해서입니다. */
 const NAMING_PROMPT = '안녕! 아직 이름이 없어 ㅠㅠ\n내 이름을 뭐라고 지어줄래?';
 
-/** 따옴표 안쪽을 이름으로 봅니다. 없으면 문장 전체를 그대로 씁니다. */
-function fallbackName(raw: string): string {
+/** 흔한 인사/잡담 첫마디. 이걸로 시작하는 짧은 문장은 이름으로 보지 않습니다. */
+const CASUAL_OPENERS = /^(안녕|hi|hello|반가워|헐|응|어|오|뭐해|배고파|심심해)/i;
+
+/**
+ * LLM 없이 이름 짓는 문장인지 판단합니다(CHAT 미설정 시 폴백).
+ *
+ * 따옴표 안쪽, "이름은 OO야/이야/입니다" 류의 명시적인 패턴, 또는 흔한
+ * 인사말이 아닌 짧은 단어 하나(가장 흔한 케이스 — 그냥 이름만 답하는 경우)를
+ * 이름으로 인정합니다. 셋 다 아니면 이름을 지어주는 문장이 아니라고 보고
+ * null을 돌려줍니다 — 잡담을 이름으로 잘못 삼지 않기 위해서입니다.
+ */
+function fallbackName(raw: string): string | null {
   const quoted = raw.match(/["'「『]([^"'」』]{1,20})["'」』]/);
-  return (quoted?.[1] ?? raw).trim().slice(0, 20);
+  if (quoted) return quoted[1].trim().slice(0, 20);
+
+  const named = raw.match(
+    /이름[은을]?\s*['"]?([가-힣a-zA-Z0-9]{1,10})['"]?\s*(?:이야|야|이다|입니다|이에요|예요)?\s*$/,
+  );
+  if (named) return named[1];
+
+  const bareWord = /^[가-힣a-zA-Z0-9]{1,10}[!.]?$/;
+  if (bareWord.test(raw) && !CASUAL_OPENERS.test(raw)) {
+    return raw.replace(/[!.]$/, '');
+  }
+
+  return null;
 }
 
 /**
- * 사용자가 자유 문장으로 지어준 이름에서 이름만 뽑아냅니다.
+ * 이 문장이 반려동물 이름을 지어주는 말이면 이름만 뽑아냅니다. 아니면 null.
+ *
+ * "이름 아직 없어" 인사 다음 메시지를 무조건 이름으로 삼으면, 사용자가
+ * 이름 대신 다른 말(인사·잡담)을 했을 때도 그걸 이름으로 저장해버립니다.
+ * 그래서 매 메시지마다(이름이 정해지기 전까지) 이 함수로 먼저 "이름을
+ * 지어주는 문장인가"를 판단하고, 아니면 평소처럼 대화로 흘려보냅니다.
  *
  * "안녕 너의 이름은 오늘부터 "먕먕이"야" 처럼 문장째로 답하는 경우가 흔해서,
  * 그 문장을 통째로 저장하면 헤더에 문장이 그대로 뜹니다. 캐릭터 연기용
  * 페르소나 클라이언트(`persona-chat/chat-client.ts`)는 "3줄 이하로 답한다"
  * 같은 규칙이 껴 있어 이 추출에는 안 맞아서, 여기서는 `llm/client.ts`를
  * 직접 써서 이름만 뽑도록 시킵니다. 키가 없거나 호출이 실패하면
- * `fallbackName`(따옴표 추출 → 문장 전체)으로 내려갑니다.
+ * `fallbackName`(따옴표/명시적 패턴 추출)으로 내려갑니다.
  */
-async function extractPetName(raw: string): Promise<string> {
+async function extractPetName(raw: string): Promise<string | null> {
   if (!CHAT) return fallbackName(raw);
 
   try {
@@ -84,17 +113,25 @@ async function extractPetName(raw: string): Promise<string> {
         {
           role: 'user',
           content: [
-            '다음 문장에서 사용자가 반려동물에게 지어준 이름만 뽑아라.',
-            '다른 설명, 조사, 문장부호 없이 이름만 출력해라.',
+            '반려동물 챗봇 앱이다. 사용자는 아직 반려동물 이름을 안 지어줬고,',
+            '방금 아래 문장을 보냈다.',
             '',
             `문장: ${raw}`,
+            '',
+            '이 문장이 인사·질문·일상 잡담(예: "안녕", "오늘 뭐해", "밥 먹었어?")이면',
+            '다른 설명 없이 정확히 NONE 이라고만 출력해라.',
+            '',
+            '그게 아니라 이름 하나만 말했거나(예: "뭉치") "이름은 OO야" 처럼',
+            '이름을 알려주는 문장이면, 그 이름만(조사·문장부호 없이) 출력해라.',
+            '짧은 단어 하나뿐이고 흔한 인사말이 아니면 이름으로 간주해라.',
           ].join('\n'),
         },
       ],
       maxTokens: 20,
     });
     const cleaned = text.trim().replace(/^["'「『]+|["'」』]+$/g, '');
-    return cleaned || fallbackName(raw);
+    if (!cleaned || cleaned.toUpperCase() === 'NONE') return null;
+    return cleaned;
   } catch {
     return fallbackName(raw);
   }
@@ -110,10 +147,9 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  /** 사용자가 채팅으로 지어준 이름. 아직 없으면 null(헤더엔 사용자 자신의 닉네임으로 표시). */
+  /** 사용자가 채팅으로 지어준 이름. 아직 없으면 null(헤더엔 사용자 자신의 닉네임으로 표시,
+   * 그동안 보내는 모든 메시지가 이름을 지어주는 말인지 먼저 확인됩니다). */
   const [petName, setPetName] = useState<string | null>(null);
-  /** 다음 사용자 메시지를 "이름 짓기 답변"으로 처리할지. */
-  const [namingMode, setNamingMode] = useState(false);
   /** 서버가 압축해 돌려준 이전 대화 요약(롱텀 메모리). 저장 서버가 없으면 계속 null. */
   const [summary, setSummary] = useState<string | null>(null);
   /** 이 기기의 익명 ID. 대화를 저장/복원할 때 씁니다. 준비되기 전엔 저장을 건너뜁니다. */
@@ -164,7 +200,6 @@ export default function ChatScreen() {
         setPetName(stored);
         return;
       }
-      setNamingMode(true);
       setMessages((prev) =>
         prev.length === 0
           ? [{ id: 'naming-prompt', role: 'assistant', content: NAMING_PROMPT }]
@@ -218,50 +253,52 @@ export default function ChatScreen() {
     const text = draft.trim();
     if (!text || busy.current) return;
 
-    if (namingMode) {
-      busy.current = true;
-      setSending(true);
-      setDraft('');
-      setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
-
-      const name = await extractPetName(text);
-      const confirmation = `${name}구나! 마음에 들어 헤헤`;
-
-      setMessages((prev) => [
-        ...prev,
-        { id: `a-${prev.length}`, role: 'assistant', content: confirmation },
-      ]);
-      setPetName(name);
-      setNamingMode(false);
-      void savePetName(name);
-
-      // 서버에도 남겨둡니다. `name`(방금 막 지어진 이름)을 정답으로 같이
-      // 보내서, 요약이 이 대화에서 이름을 다른 걸로 잘못 굳히지 않게 합니다.
-      if (deviceId.current) {
-        void appendTurns(
-          deviceId.current,
-          [
-            { role: 'user', content: text },
-            { role: 'assistant', content: confirmation },
-          ],
-          name,
-        );
-      }
-
-      busy.current = false;
-      setSending(false);
-      return;
-    }
-
-    if (!client || !CHAT) {
-      showNotice(NO_CHAT_KEY);
-      return;
-    }
-
     busy.current = true;
     setSending(true);
     setNotice(null);
     setDraft('');
+    setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
+
+    // 아직 이름이 없으면, 이번 메시지가 이름을 지어주는 말인지 먼저 확인합니다.
+    // 아니면(인사·잡담이면) 이름을 넘겨짚지 않고 아래로 흘려보내 평소처럼
+    // 대화합니다 — 그동안 헤더/캐릭터 이름은 계속 내 닉네임(displayName)입니다.
+    if (!petName) {
+      const name = await extractPetName(text);
+      if (name) {
+        const confirmation = `${name}구나! 마음에 들어 헤헤`;
+
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${prev.length}`, role: 'assistant', content: confirmation },
+        ]);
+        setPetName(name);
+        void savePetName(name);
+
+        // 서버에도 남겨둡니다. `name`(방금 막 지어진 이름)을 정답으로 같이
+        // 보내서, 요약이 이 대화에서 이름을 다른 걸로 잘못 굳히지 않게 합니다.
+        if (deviceId.current) {
+          void appendTurns(
+            deviceId.current,
+            [
+              { role: 'user', content: text },
+              { role: 'assistant', content: confirmation },
+            ],
+            name,
+          );
+        }
+
+        busy.current = false;
+        setSending(false);
+        return;
+      }
+    }
+
+    if (!client || !CHAT) {
+      showNotice(NO_CHAT_KEY);
+      busy.current = false;
+      setSending(false);
+      return;
+    }
 
     // 실패한 답은 히스토리에서 뺍니다. 에러 문구를 캐릭터가 한 말로
     // 기억시키면 다음 대답이 그걸 이어받습니다.
@@ -269,8 +306,6 @@ export default function ChatScreen() {
       ...messages.filter((m) => !m.failed).map(({ role, content }) => ({ role, content })),
       { role: 'user', content: text },
     ];
-
-    setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
 
     try {
       const answer = await client.reply({
