@@ -20,6 +20,7 @@ const Keys = {
   photoJob: '@pet/photoJob',
   album: '@pet/album',
   deviceId: '@pet/deviceId',
+  petName: '@pet/petName',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -63,7 +64,24 @@ export async function clearUser(): Promise<void> {
     Keys.swipeHintSeen,
     Keys.analysis,
     Keys.pet,
+    Keys.petName,
   ]);
+}
+
+/**
+ * 채팅에서 사용자가 지어준 반려동물 이름. 아직 안 지었으면 null.
+ *
+ * `pet`(게임 캐릭터 상태)과는 다른 개념이라 따로 둡니다 — 채팅 화면은
+ * 게임과 무관하게 독립적으로 동작합니다(파일 상단 주석 참고).
+ * 로그아웃하면 `pet`/`analysis`와 함께 지워집니다 — 다음 사람이 앞사람이
+ * 지어준 이름을 이어받으면 안 됩니다.
+ */
+export async function loadPetName(): Promise<string | null> {
+  return AsyncStorage.getItem(Keys.petName);
+}
+
+export async function savePetName(name: string): Promise<void> {
+  await AsyncStorage.setItem(Keys.petName, name);
 }
 
 /**

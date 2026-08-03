@@ -12,16 +12,17 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { BREEDS, type BreedId } from '@/constants/pet';
+import { type BreedId } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
+import { ChatCompletionsClient } from '@/lib/llm/client';
 import { chatTarget } from '@/lib/llm/config';
 import { anchorMix, dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/persona';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
 import { appendTurns, fetchConversation } from '@/lib/persona-chat/memory-client';
 import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
-import { ensureDeviceId, loadAnalysis } from '@/lib/storage';
+import { ensureDeviceId, loadAnalysis, loadPetName, savePetName } from '@/lib/storage';
 
 /**
  * 반려동물과 대화하는 화면 (오른쪽 페이지).
@@ -49,6 +50,56 @@ const CHAT = chatTarget();
 /** 안내 문구가 스스로 사라지기까지. */
 const NOTICE_MS = 5000;
 
+/** user?.nickname마저 없는(이론상 거의 없는) 경우에만 쓰는 최후 fallback. */
+const DEFAULT_PET_NAME = '닉네임';
+
+/** 이름이 없을 때 대화창에 먼저 띄우는 인사. 파싱 없이 결정적으로 동작하도록,
+ * 이 말풍선 다음에 오는 사용자의 답을 그대로 이름으로 저장합니다(LLM 호출 없음). */
+const NAMING_PROMPT = '안녕! 아직 이름이 없어 ㅠㅠ\n내 이름을 뭐라고 지어줄래?';
+
+/** 따옴표 안쪽을 이름으로 봅니다. 없으면 문장 전체를 그대로 씁니다. */
+function fallbackName(raw: string): string {
+  const quoted = raw.match(/["'「『]([^"'」』]{1,20})["'」』]/);
+  return (quoted?.[1] ?? raw).trim().slice(0, 20);
+}
+
+/**
+ * 사용자가 자유 문장으로 지어준 이름에서 이름만 뽑아냅니다.
+ *
+ * "안녕 너의 이름은 오늘부터 "먕먕이"야" 처럼 문장째로 답하는 경우가 흔해서,
+ * 그 문장을 통째로 저장하면 헤더에 문장이 그대로 뜹니다. 캐릭터 연기용
+ * 페르소나 클라이언트(`persona-chat/chat-client.ts`)는 "3줄 이하로 답한다"
+ * 같은 규칙이 껴 있어 이 추출에는 안 맞아서, 여기서는 `llm/client.ts`를
+ * 직접 써서 이름만 뽑도록 시킵니다. 키가 없거나 호출이 실패하면
+ * `fallbackName`(따옴표 추출 → 문장 전체)으로 내려갑니다.
+ */
+async function extractPetName(raw: string): Promise<string> {
+  if (!CHAT) return fallbackName(raw);
+
+  try {
+    const client = new ChatCompletionsClient({ apiKey: CHAT.apiKey, baseUrl: CHAT.baseUrl });
+    const text = await client.complete({
+      model: CHAT.model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            '다음 문장에서 사용자가 반려동물에게 지어준 이름만 뽑아라.',
+            '다른 설명, 조사, 문장부호 없이 이름만 출력해라.',
+            '',
+            `문장: ${raw}`,
+          ].join('\n'),
+        },
+      ],
+      maxTokens: 20,
+    });
+    const cleaned = text.trim().replace(/^["'「『]+|["'」』]+$/g, '');
+    return cleaned || fallbackName(raw);
+  } catch {
+    return fallbackName(raw);
+  }
+}
+
 export default function ChatScreen() {
   const c = useTheme();
   const router = useRouter();
@@ -59,6 +110,10 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  /** 사용자가 채팅으로 지어준 이름. 아직 없으면 null(헤더엔 사용자 자신의 닉네임으로 표시). */
+  const [petName, setPetName] = useState<string | null>(null);
+  /** 다음 사용자 메시지를 "이름 짓기 답변"으로 처리할지. */
+  const [namingMode, setNamingMode] = useState(false);
   /** 서버가 압축해 돌려준 이전 대화 요약(롱텀 메모리). 저장 서버가 없으면 계속 null. */
   const [summary, setSummary] = useState<string | null>(null);
   /** 이 기기의 익명 ID. 대화를 저장/복원할 때 씁니다. 준비되기 전엔 저장을 건너뜁니다. */
@@ -99,6 +154,28 @@ export default function ChatScreen() {
     };
   }, []);
 
+  // 저장된 이름이 있으면 그걸 씁니다. 없으면 새로고침 때마다(대화가 항상
+  // 빈 화면으로 시작하는 것과 같은 이유로) 이름부터 다시 물어봅니다.
+  useEffect(() => {
+    let cancelled = false;
+    loadPetName().then((stored) => {
+      if (cancelled) return;
+      if (stored) {
+        setPetName(stored);
+        return;
+      }
+      setNamingMode(true);
+      setMessages((prev) =>
+        prev.length === 0
+          ? [{ id: 'naming-prompt', role: 'assistant', content: NAMING_PROMPT }]
+          : prev,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 새로고침하면 화면의 말풍선은 항상 빈 대화로 시작합니다 — 원문 턴을
   // 다시 그리지 않습니다. 대신 서버가 압축해 둔 요약(summary)만 가져와서
   // 시스템 프롬프트에 끼워 넣습니다. "화면은 비었지만 캐릭터는 이전 대화를
@@ -125,7 +202,9 @@ export default function ChatScreen() {
   const breed = dominantBreed(mix);
   // 성격은 저장하지 않고 mix 에서 매번 다시 만듭니다 (synthesize 는 순수 함수).
   const card = useMemo(() => synthesize(mix, breed), [mix, breed]);
-  const petName = BREEDS[breed].label;
+  // 아직 채팅으로 이름을 안 지어줬으면 로그인 때 정한 내 닉네임을 자리표시자로 씁니다
+  // (문자 그대로 "닉네임"이라는 라벨을 보여주는 게 아니라, 실제 내 닉네임입니다).
+  const displayName = petName ?? user?.nickname ?? DEFAULT_PET_NAME;
 
   const client = useMemo(
     () =>
@@ -138,6 +217,28 @@ export default function ChatScreen() {
   async function send() {
     const text = draft.trim();
     if (!text || busy.current) return;
+
+    if (namingMode) {
+      busy.current = true;
+      setSending(true);
+      setDraft('');
+      setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
+
+      const name = await extractPetName(text);
+      const confirmation = `${name}구나! 마음에 들어 헤헤`;
+
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${prev.length}`, role: 'assistant', content: confirmation },
+      ]);
+      setPetName(name);
+      setNamingMode(false);
+      void savePetName(name);
+
+      busy.current = false;
+      setSending(false);
+      return;
+    }
 
     if (!client || !CHAT) {
       showNotice(NO_CHAT_KEY);
@@ -162,7 +263,7 @@ export default function ChatScreen() {
       const answer = await client.reply({
         model: CHAT.model,
         card,
-        name: petName,
+        name: displayName,
         history,
         summary,
       });
@@ -208,10 +309,7 @@ export default function ChatScreen() {
             <Text style={styles.avatarFace}>🐶</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={[styles.name, { color: c.text }]}>{petName}</Text>
-            <Text style={[styles.status, { color: c.textSecondary }]} numberOfLines={1}>
-              {card.archetype} · {user?.nickname ?? '친구'}님과 대화 중
-            </Text>
+            <Text style={[styles.name, { color: c.text }]}>{displayName}</Text>
           </View>
         </View>
 
@@ -225,7 +323,7 @@ export default function ChatScreen() {
           {messages.length === 0 &&
             (analyzed ? (
               <Text style={[styles.empty, { color: c.textSecondary }]}>
-                {petName}에게 말을 걸어보세요.
+                {displayName}에게 말을 걸어보세요.
               </Text>
             ) : (
               // 판정 전에는 중립 캐릭터라 성격이 없습니다. 왜 그런지 보여줍니다.
@@ -353,10 +451,6 @@ const styles = StyleSheet.create({
   name: {
     fontSize: FontSize.label,
     fontWeight: '800',
-  },
-  status: {
-    fontSize: FontSize.caption,
-    marginTop: 2,
   },
   thread: {
     flex: 1,
