@@ -10,13 +10,15 @@ import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
-  canDownload,
-  downloadBlob,
   latestOfStage,
-  loadPhoto,
   photoUri as albumPhotoUri,
   revokePhotoUri,
+  SAVE_DENIED_MESSAGE,
+  SAVE_SUCCESS_MESSAGE,
+  savePhotoToDevice,
+  type PhotoEntry,
 } from '@/lib/album';
+import { notify } from '@/lib/dialog';
 import { resolvePhoto } from '@/lib/image';
 import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
@@ -92,8 +94,10 @@ export default function PhotoGenScreen() {
   }, [pet?.photoUri]);
 
   /** 이 단계에서 마지막으로 만든 사진. 앨범에는 그 전 것들도 남아 있습니다. */
-  const [latest, setLatest] = useState<Blob | null>(null);
+  const [latest, setLatest] = useState<PhotoEntry | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  /** 내려받는 중. 연타로 갤러리에 같은 사진이 여러 장 들어가는 것을 막습니다. */
+  const [saving, setSaving] = useState(false);
 
   /**
    * 화면에 띄우려고 만든 blob: URL.
@@ -129,12 +133,7 @@ export default function PhotoGenScreen() {
       if (objectUrl.current) revokePhotoUri(objectUrl.current);
       objectUrl.current = uri;
       setResult(uri);
-
-      // 바이트는 내려받기에만 씁니다. 그 버튼이 없는 환경(폰)에서는 읽지
-      // 않습니다 — 쓰지도 않을 사진을 통째로 메모리에 올릴 이유가 없습니다.
-      if (!canDownload()) return;
-      const blob = await loadPhoto(entry.id);
-      if (alive && blob) setLatest(blob);
+      setLatest(entry);
     });
 
     return () => {
@@ -156,6 +155,24 @@ export default function PhotoGenScreen() {
   function run() {
     if (!photoUri || !prompt) return;
     void job.start({ breed, stage, caption, photoUri, prompt });
+  }
+
+  /**
+   * 만든 사진을 기기에 내려받습니다.
+   *
+   * 결과를 반드시 말해줍니다. 폰에서는 갤러리로 들어가서 화면상 아무 변화가
+   * 없는데, 아무 말이 없으면 눌린 건지조차 알 수 없습니다.
+   */
+  async function handleSave(entry: PhotoEntry) {
+    setSaving(true);
+    try {
+      const result = await savePhotoToDevice(entry);
+      if (result === 'saved') notify('사진을 내려받았어요', SAVE_SUCCESS_MESSAGE);
+      else if (result === 'denied') notify('저장 권한이 필요해요', SAVE_DENIED_MESSAGE);
+      else notify('사진을 내려받지 못했어요', '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   /**
@@ -283,12 +300,12 @@ export default function PhotoGenScreen() {
           것이고 브라우저가 지울 수도 있지만, 내려받은 파일은 사용자 것이
           됩니다. 그래서 보관에 성공했어도 버튼을 남겨둡니다.
         */}
-        {latest && canDownload() ? (
+        {latest ? (
           <Button
-            label="내려받기"
+            label={saving ? '내려받는 중...' : '내려받기'}
             variant="secondary"
-            onPress={() => downloadBlob(latest, `${breed}-${stage}.png`)}
-            disabled={busy}
+            onPress={() => void handleSave(latest)}
+            disabled={busy || saving}
           />
         ) : null}
         {/*

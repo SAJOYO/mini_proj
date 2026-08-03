@@ -268,6 +268,74 @@ export function canDownload(): boolean {
 }
 
 /**
+ * 사진을 기기에 내려받은 결과.
+ *
+ * 실패를 한 덩어리로 뭉치지 않는 건, 사용자가 할 수 있는 일이 다르기
+ * 때문입니다 — 권한은 설정에서 켜면 되고, 나머지는 다시 시도해 보는 수밖에
+ * 없습니다. 화면이 그 차이를 문구로 알려줄 수 있어야 합니다.
+ */
+export type SaveResult = 'saved' | 'denied' | 'failed';
+
+/**
+ * 내려받기에 성공했을 때 알려줄 말. **어디에 저장됐는지**를 말해줍니다.
+ *
+ * 폰에서는 사진이 갤러리로 들어가서 화면에는 아무 변화가 없습니다. "저장됨"
+ * 세 글자만 띄우면 어디를 열어봐야 할지 모릅니다.
+ */
+export const SAVE_SUCCESS_MESSAGE = NATIVE
+  ? '기기 갤러리에 저장했어요. 사진 앱에서 볼 수 있어요.'
+  : '파일로 내려받았어요.';
+
+/** 권한을 거절했을 때. 앱이 할 수 있는 일이 없어서 갈 곳을 알려줍니다. */
+export const SAVE_DENIED_MESSAGE = '설정에서 사진 저장 권한을 허용해 주세요.';
+
+/**
+ * 사진을 **기기에** 내려받습니다. 앱을 지워도 남는 곳으로 나가는 것입니다.
+ *
+ * 보관함과 역할이 다릅니다. 보관함은 앱 안에서 다시 보기 위한 것이고 브라우저나
+ * OS가 지울 수도 있지만, 내려받은 사진은 사용자 것이 됩니다. 그래서 둘 다 둡니다.
+ *
+ * 웹은 파일로 떨어지고, 폰은 **기기 갤러리**에 들어갑니다. 폰에서 "파일"로
+ * 떨어뜨려 봐야 찾아 들어가기 번거롭고, 만든 사진을 자랑하려면 결국 갤러리에
+ * 있어야 합니다. 대신 저장 권한을 한 번 물어봅니다.
+ */
+export async function savePhotoToDevice(entry: PhotoEntry): Promise<SaveResult> {
+  const filename = `${entry.breed}-${entry.stage}.png`;
+
+  if (!NATIVE) {
+    const blob = await loadPhoto(entry.id);
+    if (!blob || !canDownload()) return 'failed';
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    // 클릭 직후 바로 지우면 다운로드가 시작되기 전에 무효가 되는 브라우저가
+    // 있어서 한 박자 늦춥니다.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return 'saved';
+  }
+
+  try {
+    const { file } = await photoFile(entry.id);
+    if (!file.exists) return 'failed';
+
+    const MediaLibrary = await import('expo-media-library');
+
+    // writeOnly 입니다 — 우리는 넣기만 하지 남의 사진을 읽지 않습니다.
+    // 안드로이드에서 물어보는 권한의 범위가 달라집니다.
+    const permission = await MediaLibrary.requestPermissionsAsync(true);
+    if (!permission.granted) return 'denied';
+
+    await MediaLibrary.Asset.create(file.uri);
+    return 'saved';
+  } catch {
+    return 'failed';
+  }
+}
+
+/**
  * 사진을 파일로 내려받습니다.
  *
  * 보관함(IndexedDB)과 역할이 다릅니다. 보관함은 앱 안에서 다시 보기 위한
