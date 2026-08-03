@@ -267,7 +267,13 @@ export async function persistPhoto(uri: string): Promise<string> {
     const source = new File(uri);
     // extension은 점을 포함해서 옵니다(".jpeg"). 그대로 이어붙이면 "source..jpeg"가 됩니다.
     const extension = source.extension?.replace(/^\./, '') || 'jpg';
-    const target = new File(folder, `source.${extension}`);
+    // 이름에 시각을 넣어 **사진마다 주소가 달라지게** 합니다.
+    //
+    // 예전에는 늘 `source.jpg` 였습니다. 파일 내용은 바뀌는데 주소가 그대로라,
+    // 주소를 캐시 열쇠로 쓰는 <Image> 가 **앞의 사진을 계속 그렸습니다.**
+    // 사진을 다시 고르거나 다시 키운 뒤에 이전 사진이 나오던 게 이것 때문입니다.
+    // (웹은 blob: 주소가 매번 새로 생겨서 이 문제가 없었습니다.)
+    const target = new File(folder, `source-${Date.now()}.${extension}`);
     source.copy(target);
 
     return target.uri;
