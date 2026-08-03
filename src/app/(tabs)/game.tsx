@@ -55,6 +55,14 @@ const SAD_BELOW = 25;
 const PAT_STREAK_WINDOW_MS = 1500;
 
 /**
+ * 판정 근거 한 줄의 높이.
+ *
+ * "이 문장이 한 줄에 들어가는가"를 재는 기준이라 스타일과 **같은 값이어야**
+ * 합니다. 아래 face/faceMore/faceProbe 의 lineHeight 가 전부 이걸 씁니다.
+ */
+const FACE_LINE_HEIGHT = 17;
+
+/**
  * 다마고치 게임 화면.
  *
  * 사진 화면에서 품종을 넘겨받아 캐릭터를 만들고, 돌보면서 4단계로 키웁니다.
@@ -374,9 +382,6 @@ export default function GameScreen() {
               setFaceAnchorTop(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
             }>
             <Text style={[styles.days, { color: c.textSecondary }]}>함께한 {days + 1}일째</Text>
-            {face ? (
-              <Text style={[styles.days, { color: c.textSecondary }]}>{faceOpen ? '▲' : '▼'}</Text>
-            ) : null}
           </View>
           {face ? (
             <View style={styles.faceRow}>
@@ -389,7 +394,7 @@ export default function GameScreen() {
                 {face}
               </Text>
               {faceTruncated && !faceOpen ? (
-                <Text style={[styles.faceMore, { color: c.primary }]}>… 더보기</Text>
+                <Text style={[styles.faceMore, { color: c.primary }]}>더보기</Text>
               ) : null}
 
               {/*
@@ -397,12 +402,18 @@ export default function GameScreen() {
 
                 RN 은 "이 글자가 잘렸는가"를 알려주지 않습니다. numberOfLines 를
                 건 Text 는 잘린 뒤의 줄만 세어주기 때문입니다. 그래서 제한을
-                걸지 않은 같은 글자를 한 벌 더 그려서 줄 수를 세고, 두 줄 이상이면
+                걸지 않은 같은 글자를 한 벌 더 그려두고, **그게 한 줄보다 높으면**
                 "한 줄에 안 들어간다"고 봅니다. 눈에는 안 보이고 자리도 안 먹습니다.
+
+                줄 수를 세는 onTextLayout 이 더 곧바로지만 **웹에 없습니다.**
+                (react-native-web 미구현) 그걸 쓰다가 앱에서만 "더보기"가 뜨고
+                웹에서는 안 뜨는 일이 있었습니다. onLayout 은 양쪽 다 됩니다.
               */}
               <Text
                 style={styles.faceProbe}
-                onTextLayout={(e) => setFaceTruncated(e.nativeEvent.lines.length > 1)}>
+                onLayout={(e) =>
+                  setFaceTruncated(e.nativeEvent.layout.height > FACE_LINE_HEIGHT + 1)
+                }>
                 {face}
               </Text>
             </View>
@@ -414,41 +425,35 @@ export default function GameScreen() {
           </Pressable>
 
           {/*
-            성장을 기다리지 않고 **지금 모습으로** 사진을 만드는 자리입니다.
-            성장 직후 배너(goToKeepsake)와 달리 여기서는 지금 단계를 넘깁니다.
+            사진은 앨범에서 만듭니다. 여기 버튼은 앨범 하나뿐입니다.
 
-            사진이 만들어지는 동안에도 이 화면에서 계속 놀 수 있습니다.
-            진행 상황은 lib/photo-job.tsx가 화면 밖에서 들고 있어서, 여기서는
-            돌고 있는지(spinner)와 다 됐는지(빨간 점)만 보여주면 됩니다.
+            예전에는 "사진 만들기"가 따로 나란히 있었는데, 둘 다 결국 사진
+            이야기라 헤더에서 자리만 다투었습니다. 만든 사진이 쌓이는 곳이
+            앨범이니, 만드는 입구도 거기에 두는 편이 찾기 쉽습니다.
+
+            다만 진행 상황은 여기 남깁니다 — 사진이 만들어지는 동안에도 이
+            화면에서 계속 놀 수 있어서, 다 됐는지를 게임 화면에서 알 수 있어야
+            합니다. 도는 중이면 spinner, 다 됐으면 빨간 점입니다.
+            (진행 상태 자체는 lib/photo-job.tsx가 화면 밖에서 들고 있습니다)
           */}
           <Pressable
-            onPress={() => goToKeepsake(stage)}
+            onPress={() => router.push('/album')}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={
-              photoBusy ? '사진 만드는 중' : photoReady ? '사진 완성됨' : '사진 만들기'
+              photoBusy ? '사진 만드는 중' : photoReady ? '사진 완성됨' : '앨범 보기'
             }
             style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
             {photoBusy ? (
               // 이모지와 자리를 맞춰서 도는 동안 버튼 폭이 흔들리지 않게 합니다.
               <ActivityIndicator size="small" color={c.primary} style={styles.photoSpinner} />
             ) : (
-              <Text style={styles.photoIcon}>📷</Text>
+              <Text style={styles.photoIcon}>🖼️</Text>
             )}
             <Text style={[styles.photoLabel, { color: c.textSecondary }]}>
-              {photoBusy ? '만드는 중' : '사진 만들기'}
+              {photoBusy ? '만드는 중' : '앨범'}
             </Text>
             {photoReady ? <View style={[styles.photoDot, { backgroundColor: c.primary }]} /> : null}
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/album')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="앨범 보기"
-            style={[styles.photoButton, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={styles.photoIcon}>🖼️</Text>
-            <Text style={[styles.photoLabel, { color: c.textSecondary }]}>앨범</Text>
           </Pressable>
         </View>
 
@@ -951,7 +956,7 @@ const styles = StyleSheet.create({
   },
   face: {
     fontSize: FontSize.caption,
-    lineHeight: 17,
+    lineHeight: FACE_LINE_HEIGHT,
     // 줄어들 수 있어야 "더보기"에게 자리를 내주고 잘립니다.
     flexShrink: 1,
   },
@@ -960,8 +965,12 @@ const styles = StyleSheet.create({
   },
   faceMore: {
     fontSize: FontSize.caption,
-    lineHeight: 17,
+    lineHeight: FACE_LINE_HEIGHT,
     fontWeight: '700',
+    marginLeft: Spacing.xs,
+    // 줄어들면 안 됩니다. 웹에서 이게 빠져 있어 "더/보/기" 로 세로로 쪼개졌습니다
+    // — 자리가 모자라면 잘려야 하는 건 문장 쪽이지 이 글자가 아닙니다.
+    flexShrink: 0,
   },
   faceProbe: {
     // 줄 수만 세는 용도라 보이지도, 자리를 차지하지도, 눌리지도 않습니다.
@@ -971,7 +980,7 @@ const styles = StyleSheet.create({
     opacity: 0,
     pointerEvents: 'none',
     fontSize: FontSize.caption,
-    lineHeight: 17,
+    lineHeight: FACE_LINE_HEIGHT,
   },
   swipeHint: {
     fontSize: FontSize.caption,

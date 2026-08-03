@@ -16,7 +16,7 @@ import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
 import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /**
- * 사진 만들기 화면.
+ * 사진 찍기 화면.
  *
  * 게임에서 넘어온 재료(사진 + 프롬프트)로 ComfyUI에 사진 한 장을 주문하고
  * 결과를 보여줍니다. 서버와 이야기하는 부분은 전부 lib/comfy.ts에 있습니다 —
@@ -144,19 +144,23 @@ export default function PhotoGenScreen() {
   /**
    * 게임 화면으로 돌아갑니다.
    *
-   * 그냥 back()을 부르면 **새로고침한 뒤에 터집니다.** 새로고침하면 앱 안의
-   * 화면 이력이 사라져서 돌아갈 곳이 없어지거든요("GO_BACK was not handled").
-   * 이 화면은 생성이 몇 분씩 걸려서 그 사이 새로고침하는 일이 흔하고,
-   * 링크로 바로 열고 들어오는 경우도 마찬가지입니다.
+   * back() 이 아니라 **언제나 게임으로** 보냅니다. 여기 들어오는 길이 여럿이라
+   * (앨범, 성장 직후 배너) back() 은 그때그때 다른 곳으로 떨어집니다. 사진을
+   * 다 만들고 나면 가고 싶은 곳은 대개 게임이지 앨범이 아닙니다 — 앨범으로
+   * 돌아가 봐야 거기서 또 한 번 나가야 합니다.
+   *
+   * replace 인 것도 일부러입니다. push 로 쌓으면 뒤로 가기가 이 화면으로
+   * 되돌아옵니다. 새로고침 뒤에 이력이 없어 back() 이 터지던 문제
+   * ("GO_BACK was not handled")도 이걸로 같이 없어집니다 — 이 화면은 생성이
+   * 몇 분씩 걸려서 그 사이 새로고침하는 일이 흔합니다.
    */
   function goBack() {
-    if (router.canGoBack()) router.back();
-    else router.replace('/game');
+    router.replace('/game');
   }
 
   return (
     <Screen>
-      <Text style={[styles.title, { color: c.text }]}>사진 만들기</Text>
+      <Text style={[styles.title, { color: c.text }]}>사진 찍기</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
         {caption || '함께한 모습을 한 장으로 남겨 드려요.'}
       </Text>
@@ -245,7 +249,7 @@ export default function PhotoGenScreen() {
           앨범에 한 장씩 쌓이고, 여기에는 마지막 것이 보입니다.
         */}
         <Button
-          label={result ? '한 장 더 만들기' : '사진 만들기'}
+          label={result ? '한 장 더 찍기' : '사진 찍기'}
           onPress={run}
           loading={busy}
           disabled={missing !== null || otherBusy}

@@ -16,7 +16,9 @@ import {
   type PhotoEntry,
 } from '@/lib/album';
 import { confirmAction } from '@/lib/dialog';
-import { STAGES } from '@/lib/game';
+import { STAGES, stageOf } from '@/lib/game';
+import { usePet } from '@/lib/pet';
+import { isRunning, usePhotoJob } from '@/lib/photo-job';
 
 /**
  * 앨범 — 지금까지 만든 사진을 성장 단계별로 모아 봅니다.
@@ -41,6 +43,8 @@ type Loaded = Record<string, string>;
 export default function AlbumScreen() {
   const c = useTheme();
   const router = useRouter();
+  const { pet } = usePet();
+  const photoBusy = isRunning(usePhotoJob());
 
   const [entries, setEntries] = useState<PhotoEntry[] | null>(null);
   const [urls, setUrls] = useState<Loaded>({});
@@ -195,6 +199,24 @@ export default function AlbumScreen() {
       </ScrollView>
 
       <View style={styles.actions}>
+        {/*
+          사진을 만드는 입구. 예전에는 게임 화면 헤더에 따로 있었는데, 만든
+          사진이 쌓이는 곳이 여기라 입구도 여기로 옮겼습니다.
+
+          **지금 단계**로 만듭니다. 성장 직후에 뜨는 배너는 방금 떠나온 단계로
+          만드는데(그 모습은 다시 못 봅니다), 여기서는 그럴 이유가 없습니다.
+
+          캐릭터를 아직 안 만들었으면 만들 대상이 없어서 버튼을 감춥니다.
+        */}
+        {pet ? (
+          <Button
+            label={photoBusy ? '사진 만드는 중...' : '사진 찍기'}
+            onPress={() =>
+              router.push({ pathname: '/photo-gen', params: { stage: stageOf(pet).id } })
+            }
+            disabled={photoBusy}
+          />
+        ) : null}
         <Button label="돌아가기" variant="secondary" onPress={goBack} />
       </View>
     </Screen>
@@ -277,6 +299,7 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   actions: {
+    gap: Spacing.sm,
     paddingBottom: Spacing.md,
   },
 });
