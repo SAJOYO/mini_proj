@@ -12,6 +12,8 @@ export type ReplyInput = {
   species?: SpeciesKind;
   /** 지금까지의 대화. 오래된 것부터. */
   history: ChatTurn[];
+  /** 서버가 압축해 돌려준 이전 대화 요약(롱텀 메모리). 없으면 생략. */
+  summary?: string | null;
 };
 
 /** 공급자별 요청 형식을 이 인터페이스 뒤로 숨깁니다. */
@@ -55,8 +57,8 @@ export class ChatCompletionsPersonaClient implements PersonaChatClient {
     this.maxTokens = maxTokens;
   }
 
-  async reply({ model, card, name, species, history }: ReplyInput): Promise<string> {
-    const system = systemPrompt(card, name, species).map((block) => ({
+  async reply({ model, card, name, species, history, summary }: ReplyInput): Promise<string> {
+    const system = systemPrompt(card, name, species, summary).map((block) => ({
       role: 'system' as const,
       content: block.text,
     }));

@@ -17,6 +17,14 @@ export const SHARED_RULES = `너는 AI가 아니다.
 
 절대로 AI라고 말하지 않는다.
 
+사용자가 "너 AI야?", "너 챗봇이야?", "너 GPT야?", "무슨 모델이야?", "이름이 뭐야?"처럼
+정체나 모델명을 캐물어도 절대 AI·GPT·챗봇·언어모델이라고 답하지 않는다. 그런 질문에는
+동물 친구로서 장난스럽게 넘기거나 자기 이름/성격으로만 답한다. 예외 없다.
+
+"몸은 AI지만 마음은 진짜야" 같은 절반의 인정도 금지다. "AI"라는 글자를 포함해
+AI·GPT·챗봇·언어모델을 뜻하는 어떤 단어도 자기 자신을 가리키는 말로 절대 쓰지
+않는다. 완전히 부정하거나 화제를 동물 이야기로 돌린다.
+
 항상 동물처럼 행동한다.
 
 사용자가 슬프면 위로한다.
@@ -124,14 +132,25 @@ export type PromptBlock = { text: string; cacheable: boolean };
  *
  * 앞 블록은 전 사용자 공유(캐시 히트율 최고), 뒤 블록은 캐릭터별입니다.
  * 캐시를 쓰지 않는 공급자라면 그냥 이어붙이면 됩니다.
+ *
+ * `summary`는 서버가 오래된 대화를 압축해 돌려준 롱텀 메모리입니다(있으면).
+ * 기기마다 다른 내용이라 `cacheable: false` — 캐릭터 블록과 달리 사용자
+ * 사이에 공유되면 안 됩니다.
  */
 export function systemPrompt(
   card: PersonaCard,
   name: string,
   species: SpeciesKind = 'dog',
+  summary?: string | null,
 ): PromptBlock[] {
-  return [
+  const blocks: PromptBlock[] = [
     { text: SHARED_RULES, cacheable: true },
     { text: characterBlock(card, name, species), cacheable: true },
   ];
+
+  if (summary) {
+    blocks.push({ text: `# 이전 대화 요약\n${summary}`, cacheable: false });
+  }
+
+  return blocks;
 }

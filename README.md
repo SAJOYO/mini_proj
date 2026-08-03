@@ -370,6 +370,55 @@ python main.py --listen 0.0.0.0 --enable-cors-header "*"
 
 ---
 
+## 대화 저장 서버 (server/)
+
+채팅 화면(`src/app/(tabs)/chat.tsx`)은 원래 대화를 화면 상태로만 들고 있어서
+새로고침하면 대화가 사라졌습니다. **의도적으로 그 동작은 유지합니다** — 새로고침하면
+말풍선은 항상 빈 화면으로 시작합니다. 대신 `server/`에 작은 Node 서버를 하나 두어,
+화면엔 안 보여도 캐릭터가 그 전에 무슨 얘기를 나눴는지는 기억하게 합니다 —
+**ComfyUI와 같은 성격**입니다. 팀원 노트북에서 로컬로 띄우고, 앱은 그 사설 IP로
+붙습니다. 키가 없고, 인증도 없습니다.
+
+- **숏텀 메모리**: 지금 화면에 떠 있는 대화(`messages` state). 새로고침하면 없어집니다.
+- **롱텀 메모리**: 메시지를 주고받을 때마다 서버가 그때까지의 대화를 요약 하나로
+  압축해 저장합니다. 새로고침 뒤 처음 말을 걸면, 화면엔 아무것도 없어도 이 요약이
+  시스템 프롬프트에 끼워져서 캐릭터가 이전 맥락을 이어받습니다.
+
+### 서버 띄우기
+
+```bash
+cd server
+npm install
+cp .env.example .env   # PORT, 요약용 CHAT_* 키 채우기 (CHAT_* 는 비워도 됨 — 요약만 꺼짐)
+npm run dev
+```
+
+Node **22.5 이상**이 필요합니다(`node:sqlite` 내장 모듈을 씁니다 — 네이티브
+DB 애드온이 아니라서 Visual Studio Build Tools 없이도 `npm install`이 됩니다).
+
+### 앱 쪽 설정
+
+`.env.example`을 `.env`로 복사하고 서버 주소를 채우세요 (ComfyUI와 같은 방식).
+
+```bash
+EXPO_PUBLIC_MEMORY_URL=http://192.168.0.2:4000
+```
+
+**비워두면 저장/복원 없이 지금까지처럼 메모리에만 대화가 남습니다** — 필수 설정이
+아니라서, 서버를 아직 안 띄운 팀원도 채팅 화면은 그대로 씁니다.
+
+### 어디를 고치면 되나
+
+| 하고 싶은 것 | 고칠 곳 |
+| --- | --- |
+| 저장/조회 API | `server/src/index.ts` |
+| DB 스키마 | `server/src/db.ts` |
+| 요약 프롬프트 | `server/src/summarize.ts`의 `foldIntoSummary()` |
+| 앱이 서버를 부르는 부분 | `src/lib/persona-chat/memory-client.ts` |
+| 기기 익명 ID | `src/lib/storage.ts`의 `ensureDeviceId()` |
+
+---
+
 ## 협업 규칙
 
 ### 브랜치 구조

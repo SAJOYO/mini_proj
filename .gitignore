@@ -47,6 +47,12 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# memory server (server/) local SQLite data
+server/*.db
+server/*.db-journal
+server/*.db-wal
+server/*.db-shm
+
 example
 
 # generated native folders

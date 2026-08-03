@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 
 /**
  * 로컬 저장소 얇은 래퍼.
@@ -18,6 +19,8 @@ const Keys = {
   pet: '@pet/pet',
   photoJob: '@pet/photoJob',
   album: '@pet/album',
+  deviceId: '@pet/deviceId',
+  petName: '@pet/petName',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -61,7 +64,46 @@ export async function clearUser(): Promise<void> {
     Keys.swipeHintSeen,
     Keys.analysis,
     Keys.pet,
+    Keys.petName,
   ]);
+}
+
+/**
+ * 채팅에서 사용자가 지어준 반려동물 이름. 아직 안 지었으면 null.
+ *
+ * `pet`(게임 캐릭터 상태)과는 다른 개념이라 따로 둡니다 — 채팅 화면은
+ * 게임과 무관하게 독립적으로 동작합니다(파일 상단 주석 참고).
+ * 로그아웃하면 `pet`/`analysis`와 함께 지워집니다 — 다음 사람이 앞사람이
+ * 지어준 이름을 이어받으면 안 됩니다.
+ */
+export async function loadPetName(): Promise<string | null> {
+  return AsyncStorage.getItem(Keys.petName);
+}
+
+export async function savePetName(name: string): Promise<void> {
+  await AsyncStorage.setItem(Keys.petName, name);
+}
+
+/** "다시 키우기"로 캐릭터를 지울 때 같이 부릅니다 — 새 캐릭터는 새 이름을 물어봐야 합니다. */
+export async function clearPetName(): Promise<void> {
+  await AsyncStorage.removeItem(Keys.petName);
+}
+
+/**
+ * 채팅 대화를 서버에 저장할 때 "누구 대화인지" 구분하는 익명 ID.
+ *
+ * 로그인이 없는 프로젝트라 기기가 곧 사용자입니다. 없으면 한 번 만들어서
+ * 저장하고, 그 뒤로는 항상 같은 값을 돌려줍니다. 닉네임(로그아웃하면
+ * 지워짐)과 달리 이 값은 `clearUser()`가 건드리지 않습니다 — 로그아웃/재로그인
+ * 해도 같은 기기의 대화 기록은 그대로 이어져야 합니다.
+ */
+export async function ensureDeviceId(): Promise<string> {
+  const existing = await AsyncStorage.getItem(Keys.deviceId);
+  if (existing) return existing;
+
+  const id = Crypto.randomUUID();
+  await AsyncStorage.setItem(Keys.deviceId, id);
+  return id;
 }
 
 /** 사용자가 고른 사진의 로컬 URI. 아직 안 골랐으면 null. */
