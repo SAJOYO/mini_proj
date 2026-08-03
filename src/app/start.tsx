@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useRouter, type Href } from 'expo-router';
 
 import { StyleSheet, Text, View } from 'react-native';
@@ -45,9 +46,18 @@ export default function StartScreen() {
   return (
     <Screen>
       <View style={styles.hero}>
-        <View style={[styles.mascot, { backgroundColor: c.surfaceAlt }]}>
-          <Text style={styles.mascotFace}>🐶</Text>
-        </View>
+        {/*
+          앱 아이콘과 같은 그림입니다. 이모지를 쓰던 자리인데, 이모지는 기기마다
+          다르게 그려져서 첫 화면의 얼굴로 삼기에는 미덥지 않았습니다.
+          런처에서 보던 그림이 그대로 나오면 "그 앱이 맞다"는 것도 분명해집니다.
+        */}
+        <Image
+          source={require('../../assets/images/icon.png')}
+          style={styles.mascot}
+          contentFit="contain"
+          accessibilityLabel="독플갱어"
+        />
+        <Text style={[styles.brand, { color: c.primary }]}>독플갱어</Text>
 
         {returning ? (
           <>
@@ -94,11 +104,13 @@ const styles = StyleSheet.create({
     width: 132,
     height: 132,
     borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  mascotFace: {
-    fontSize: 64,
+  brand: {
+    fontSize: FontSize.title,
+    fontWeight: '800',
+    // 아이콘과 한 덩어리로 보이게 붙입니다. hero 의 gap 이 넓어서 그냥 두면
+    // 이름이 아래 문장 쪽에 붙어 보입니다.
+    marginTop: -Spacing.sm,
   },
   title: {
     fontSize: FontSize.display,
