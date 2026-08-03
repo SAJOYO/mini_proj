@@ -12,12 +12,12 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/screen';
-import { BREEDS } from '@/constants/pet';
+import { BREEDS, type BreedId } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { chatTarget } from '@/lib/llm/config';
-import { dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/persona';
+import { anchorMix, dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/persona';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
 import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
 import { loadAnalysis } from '@/lib/storage';
@@ -81,7 +81,12 @@ export default function ChatScreen() {
     let cancelled = false;
     loadAnalysis().then((saved) => {
       if (cancelled) return;
-      if (saved) setMix(resolveMix(saved.mix));
+      if (saved) {
+        // 결과 화면에서 고른 품종을 맨 앞으로 올립니다. 이걸 빼면 게임에는
+        // 고른 동물이, 여기에는 판정 1순위가 떠서 같은 캐릭터가 둘로 보입니다.
+        // 퍼센트는 모델이 낸 그대로입니다 — 순서만 바뀝니다.
+        setMix(anchorMix(resolveMix(saved.mix), saved.chosen as BreedId | undefined));
+      }
       setAnalyzed(saved !== null);
     });
     return () => {
@@ -89,9 +94,12 @@ export default function ChatScreen() {
     };
   }, []);
 
-  // 성격은 저장하지 않고 mix 에서 매번 다시 만듭니다 (synthesize 는 순수 함수).
-  const card = useMemo(() => synthesize(mix), [mix]);
+  // mix 는 이미 기준점이 맨 앞입니다. 그래도 synthesize 에 다시 넘겨야 합니다 —
+  // 안에서 resolveMix 로 비율 내림차순 재정렬을 하기 때문에, 안 넘기면
+  // 애써 올려둔 기준점이 도로 내려갑니다.
   const breed = dominantBreed(mix);
+  // 성격은 저장하지 않고 mix 에서 매번 다시 만듭니다 (synthesize 는 순수 함수).
+  const card = useMemo(() => synthesize(mix, breed), [mix, breed]);
   const petName = BREEDS[breed].label;
 
   const client = useMemo(

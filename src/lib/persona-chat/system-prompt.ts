@@ -94,7 +94,10 @@ export function characterBlock(
   const base = species === 'cat' ? CAT_BASE : DOG_BASE;
   const lines = ['# 너는 누구인가', name];
 
-  // 겉모습은 1순위 품종으로 그리므로(pet.ts) 화면과 말이 맞게 언급합니다.
+  // 화면과 말이 맞게 생김새를 언급합니다. `card.mix`는 `synthesize(mix, anchor)`가
+  // 낸 것이라 맨 앞이 **사용자가 결과 화면에서 고른 품종**이고, `dominantBreed`는
+  // 그걸 그대로 돌려줍니다(지분 1위가 아닙니다). 게임 화면도 같은 품종으로
+  // 그리므로(pet.ts) 따로 맞춰줄 것이 없습니다.
   // 고양이는 아직 실제 품종 판정이 없어 생김새 문장을 넣지 않습니다.
   if (species === 'dog') {
     const looks = BREEDS[dominantBreed(card.mix)].label;

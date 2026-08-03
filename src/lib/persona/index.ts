@@ -26,8 +26,10 @@
  * `axes`와 `bands`를 읽고 각자 자기 영역에서 해석하세요.
  * 행동 축이 필요해지면 담당자와 합의한 뒤 `axes.ts`에 추가하면 됩니다.
  *
- * `pet.ts`(생김새)와는 분리돼 있습니다. 겉모습은 1순위 품종을 그대로 쓰고,
- * 성격만 혼합 비율 전체를 씁니다.
+ * `pet.ts`(생김새)와는 분리돼 있습니다. 겉모습과 성격은 **같은 품종**을
+ * 기준점으로 삼습니다 — 사용자가 판정 결과 화면에서 고른 그 품종입니다
+ * (`anchorMix`가 그 품종을 혼합의 맨 앞으로 올립니다).
+ * 나머지 품종은 겉모습에는 안 나타나고, 성격만 지분만큼 끌어당깁니다.
  */
 
 export {
@@ -43,6 +45,7 @@ export {
 export { BREED_AXES } from '@/lib/persona/presets';
 export {
   DEFAULT_MIX,
+  anchorMix,
   dominantBreed,
   resolveMix,
   synthesize,

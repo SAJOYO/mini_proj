@@ -20,8 +20,13 @@ import { visionTarget } from '@/lib/llm/config';
 import { confirmAction, notify } from '@/lib/dialog';
 import { usePet } from '@/lib/pet';
 import { createCharacterFromPhoto } from '@/lib/pipeline';
-import { dominantBreed, resolveMix } from '@/lib/persona';
-import { clearPhotoUri, loadPhotoUri, saveAnalysis, savePhotoUri } from '@/lib/storage';
+import {
+  clearPhotoUri,
+  loadAnalysis,
+  loadPhotoUri,
+  saveAnalysis,
+  savePhotoUri,
+} from '@/lib/storage';
 
 const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ['images'],
@@ -46,7 +51,7 @@ export default function PhotoScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const { pet, hatch, release } = usePet();
+  const { pet, isLoading: petLoading, release } = usePet();
 
   /**
    * 저장에 쓰는 값. 웹에서는 **열쇠**(photo:source)라 그대로 화면에 못 씁니다.
@@ -57,6 +62,14 @@ export default function PhotoScreen() {
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  /**
+   * 저장된 판정이 있는지. 펫이 없으면 "아직 아무 동물도 안 고른 상태"라는 뜻입니다.
+   *
+   * 결과 화면에서 앱을 껐다 켜면 여기(/photo)로 돌아옵니다. 그때 다시
+   * [분석하기]를 누르게 두면 **무료 한도를 한 건 더 태웁니다**(하루 20건).
+   * 이미 받아둔 결과가 있으니 그리로 보내주는 게 맞습니다.
+   */
+  const [hasAnalysis, setHasAnalysis] = useState(false);
 
   /**
    * 화면에 띄우는 데 쓰는 주소. 열쇠를 꺼낸 결과입니다.
@@ -98,6 +111,20 @@ export default function PhotoScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    loadAnalysis().then((saved) => {
+      if (!cancelled) setHasAnalysis(saved !== null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 펫 읽기가 끝난 뒤에 판단합니다. 아직 읽는 중이면 펫이 있어도 null 이라
+  // "이어서 고르기"가 잠깐 떴다 사라집니다.
+  const hasPendingChoice = hasAnalysis && !pet && !petLoading;
+
   async function applyResult(result: ImagePicker.ImagePickerResult) {
     if (result.canceled) return;
 
@@ -114,12 +141,14 @@ export default function PhotoScreen() {
   }
 
   /**
-   * 사진 → 판정 → 캐릭터 → 게임 화면.
+   * 사진 → 판정 → **결과 화면**.
    *
-   * 한 번에 세 곳으로 갈라집니다.
-   *   mix 전체   저장소(@pet/analysis) → 대화가 읽어서 성격을 만듭니다
-   *   1순위 품종  hatch() → 게임 캐릭터의 생김새
-   *   face       저장소 → 게임 화면이 "왜 이 동물인가"를 보여줍니다
+   * 여기서 캐릭터를 만들지 않습니다. 판정 결과만 저장하고 `/result` 로 넘깁니다 —
+   * 사용자가 3순위 중 하나를 고른 뒤에 그 화면이 `hatch()` 를 부릅니다.
+   * (예전에는 1순위로 바로 캐릭터를 만들고 게임으로 갔습니다.)
+   *
+   *   mix · face · reasons  저장소(@pet/analysis) → 결과 화면과 대화가 읽습니다
+   *   고른 품종             결과 화면이 chosen 으로 덧붙여 저장 → 성격의 기준점
    *
    * 결과는 저장해두고 다시 부르지 않습니다. 무료 한도가 빠듯해서 화면을
    * 드나들 때마다 호출하면 금방 막힙니다.
@@ -161,10 +190,7 @@ export default function PhotoScreen() {
         createdAt: new Date().toISOString(),
       });
 
-      // 겉모습은 1순위 품종으로 그립니다. 퍼센트는 성격(대화)에만 쓰입니다.
-      await hatch(dominantBreed(resolveMix(inference.mix)), photoUri);
-
-      router.replace('/game');
+      router.replace('/result');
     } catch (error) {
       // 무엇이 잘못됐는지 보여줍니다. "실패했어요"만 띄우면 키 문제인지
       // 네트워크인지 모델이 이상한 걸 뱉은 건지 알 수가 없습니다.
@@ -228,35 +254,58 @@ export default function PhotoScreen() {
 
       <Text style={[styles.title, { color: c.text }]}>얼굴이 잘 보이는{'\n'}사진을 올려주세요</Text>
 
-      <Pressable
-        onPress={photoUri ? undefined : pickFromLibrary}
-        disabled={busy}
-        style={[
-          styles.slot,
-          {
-            backgroundColor: c.surfaceAlt,
-            borderColor: c.border,
-            borderStyle: photoUri ? 'solid' : 'dashed',
-          },
-        ]}>
-        {photoUri ? (
-          <Image
-            source={{ uri: previewUri ?? undefined }}
-            style={styles.preview}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={styles.slotEmpty}>
-            <Text style={styles.slotIcon}>📷</Text>
-            <Text style={[styles.slotHint, { color: c.textSecondary }]}>눌러서 사진 고르기</Text>
-          </View>
-        )}
-      </Pressable>
+      {/* 남는 세로 공간을 이 칸이 다 먹지 않게, 가운데에 정사각형으로 띄웁니다. */}
+      <View style={styles.slotArea}>
+        <Pressable
+          onPress={photoUri ? undefined : pickFromLibrary}
+          disabled={busy}
+          style={[
+            styles.slot,
+            {
+              backgroundColor: c.surfaceAlt,
+              borderColor: c.border,
+              borderStyle: photoUri ? 'solid' : 'dashed',
+            },
+          ]}>
+          {photoUri ? (
+            // contain 입니다 — 잘라내지 않고 사진 전체를 보여줍니다.
+            // 웹에서는 피커의 1:1 자르기(allowsEditing)가 동작하지 않아서 원본
+            // 비율 그대로 들어옵니다. cover 로 두면 세로 사진의 위아래가, 가로
+            // 사진의 좌우가 잘려서 "이 사진으로 판정된다"와 화면이 어긋납니다.
+            <Image
+              source={{ uri: previewUri ?? undefined }}
+              style={styles.preview}
+              contentFit="contain"
+            />
+          ) : (
+            <View style={styles.slotEmpty}>
+              <Text style={styles.slotIcon}>📷</Text>
+              <Text style={[styles.slotHint, { color: c.textSecondary }]}>눌러서 사진 고르기</Text>
+            </View>
+          )}
+        </Pressable>
+      </View>
 
       <View style={styles.actions}>
+        {/* 분석은 해뒀는데 아직 안 고른 사람. 다시 분석하면 한도를 또 씁니다. */}
+        {hasPendingChoice && (
+          <Button
+            label="분석 결과 이어서 고르기"
+            onPress={() => router.replace('/result')}
+            disabled={busy || analyzing}
+          />
+        )}
         {photoUri ? (
           <>
-            <Button label="분석하기" onPress={analyze} loading={analyzing} disabled={busy} />
+            <Button
+              // 안 고른 결과가 남아 있으면 그쪽이 주된 행동이라 한 단계 낮춥니다.
+              // (여기서 다시 분석하면 하루 20건 한도를 한 건 더 씁니다.)
+              label={hasPendingChoice ? '사진 다시 분석하기' : '분석하기'}
+              variant={hasPendingChoice ? 'secondary' : undefined}
+              onPress={analyze}
+              loading={analyzing}
+              disabled={busy}
+            />
             <Button
               label="다시 고르기"
               variant="secondary"
@@ -271,7 +320,14 @@ export default function PhotoScreen() {
           </>
         ) : (
           <>
-            <Button label="앨범에서 고르기" onPress={pickFromLibrary} loading={busy} />
+            <Button
+              // 안 고른 결과가 남아 있으면 그 버튼이 주된 행동이라, 같은 색 버튼이
+              // 둘 나란히 서지 않게 한 단계 낮춥니다.
+              label="앨범에서 고르기"
+              variant={hasPendingChoice ? 'secondary' : undefined}
+              onPress={pickFromLibrary}
+              loading={busy}
+            />
             {Platform.OS !== 'web' && (
               <Button
                 label="카메라로 찍기"
@@ -308,14 +364,23 @@ const styles = StyleSheet.create({
     lineHeight: 32,
     marginBottom: Spacing.lg,
   },
-  slot: {
+  slotArea: {
     flex: 1,
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  slot: {
+    // 피커가 1:1 로 잘라주므로 칸도 정사각형입니다. 화면이 세로로 길어도
+    // 사진이 같이 커지지 않게 위쪽 한계를 둡니다.
+    width: '100%',
+    maxWidth: 260,
+    aspectRatio: 1,
+    alignSelf: 'center',
     borderWidth: 2,
     borderRadius: Radius.lg,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.lg,
   },
   slotEmpty: {
     alignItems: 'center',
