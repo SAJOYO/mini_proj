@@ -77,6 +77,7 @@ git push origin --delete <브랜치명>
 | 태그 | 내용 | 접은 이유 |
 | --- | --- | --- |
 | `archive/scene-habitats-by-biome` | 서식지별 확장 씬 5종 (초원·숲·사막·하늘·극지), `pet-scene.tsx` +235줄 | 고도화 일정 없음 |
+| `archive/painterly-experiment` | 회화체 렌더링 4단계(단색·붓결·선 제거+빛·파스텔) + 꽃밭 씬, `lib/paint.ts` 신규 | 제품에 적용하지 않기로 함 |
 
 ---
 
