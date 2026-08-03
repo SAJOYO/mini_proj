@@ -515,6 +515,23 @@ npx eas-cli build --platform android --profile preview
 `preview` 프로필은 스토어용 `.aab` 대신 **바로 설치되는 `.apk`** 를 만듭니다
 (`eas.json` 참고). 한 번에 **20~40분** 걸리고, 끝나면 다운로드 링크가 나옵니다.
 
+### 발표용 APK — 시연 도구가 들어간 빌드
+
+```bash
+npx eas-cli build --platform android --profile demo
+```
+
+`demo` 프로필은 `preview` 와 같은 APK에 **게임 화면의 시연 도구만 켜둔 것**입니다
+(`EXPO_PUBLIC_DEMO_TOOLS=1`). 성장 단계 건너뛰기 · 스탯 조작 · 소원 띄우기 ·
+여행 보내기를 APK에서도 쓸 수 있습니다. 청년기가 180 EXP, 노년기가 함께한 지 7일이라
+발표 자리에서 실제로 기다릴 수는 없기 때문입니다.
+
+키는 `preview` 와 같은 EAS 환경(`environment: "preview"`)에서 가져옵니다 — 따로 등록할
+필요가 없습니다.
+
+> ⚠️ **배포용은 `preview` 로 구우세요.** `demo` 로 구운 APK를 그대로 나눠주면 쓰는 사람이
+> 스탯과 성장을 마음대로 건드릴 수 있습니다.
+
 ### 키는 저장소가 아니라 빌드 서버에
 
 `.env` 는 커밋되지 않으므로 클라우드 빌드에는 올라가지 않습니다. **EAS에 따로 등록**해야

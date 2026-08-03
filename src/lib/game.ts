@@ -1062,10 +1062,27 @@ export function endingOf(pet: Pet): Ending | null {
 /* ------------------------------------------------------------------ */
 
 /**
+ * 시연 도구를 보여줄지. 개발 중이거나 `EXPO_PUBLIC_DEMO_TOOLS=1`이면 true입니다.
+ *
+ * ## 왜 `__DEV__`만으로는 부족한가
+ *
+ * 시연 도구는 원래 개발 빌드에서만 보였습니다. 그런데 발표를 **APK로** 하면
+ * `__DEV__`가 false라 도구가 사라지고, 성장과 엔딩을 보여줄 방법이 없어집니다
+ * (청년기 180 EXP, 노년기는 함께한 지 7일 — 무대에서 기다릴 수 없습니다).
+ *
+ * 그래서 환경 변수로도 열 수 있게 했습니다. `eas.json`의 `demo` 프로필로 만든
+ * APK에서만 켜지고, `preview`·`production` 에서는 값이 없어 그대로 숨겨집니다.
+ *
+ * 값 비교를 `=== '1'`로 못 박은 이유 — Babel이 이 자리에 **글자를 그대로**
+ * 끼워 넣기 때문에, 변수를 안 정하면 `undefined`가 아니라 빈 문자열이 됩니다.
+ */
+export const SHOW_DEMO_TOOLS = __DEV__ || process.env.EXPO_PUBLIC_DEMO_TOOLS === '1';
+
+/**
  * 발표 시연용. 다음 단계로 즉시 넘깁니다.
  * 경험치 구간은 경험치를 채우고, 청년기에서는 시간을 앞당깁니다.
  *
- * 개발 빌드에서만 버튼이 보입니다 (src/app/game.tsx의 __DEV__ 분기).
+ * 버튼은 SHOW_DEMO_TOOLS 일 때만 보입니다 (src/app/(tabs)/game.tsx 의 분기).
  */
 export function skipToNextStage(pet: Pet, now: number = Date.now()): Pet {
   const stage = stageOf(pet, now);

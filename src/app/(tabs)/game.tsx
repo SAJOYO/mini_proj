@@ -34,6 +34,7 @@ import {
   isPackingBags,
   patStreakReaction,
   progressToNext,
+  SHOW_DEMO_TOOLS,
   sideEffectHint,
   STATS,
   stageOf,
@@ -759,8 +760,8 @@ export default function GameScreen() {
         ← 옆으로 밀면 {BREEDS[pet.breed].label}와 대화할 수 있어요
       </Text>
 
-      {__DEV__ && (
-        // 개발·발표 시연용. 개발 빌드에서만 보입니다.
+      {SHOW_DEMO_TOOLS && (
+        // 개발·발표 시연용. 개발 빌드와 `demo` 프로필 APK에서만 보입니다.
         // 시간을 실제로 흘려 기다리지 않고도 성장·방치·엔딩을 확인하려는 목적입니다.
         //
         // 기본은 접어둡니다. 발표는 개발 서버로 하기 때문에 이 도구가 그대로

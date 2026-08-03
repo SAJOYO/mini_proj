@@ -14,8 +14,8 @@
     "android": {
       "package": "com.sajoyo.minipet",
       "adaptiveIcon": {
-        "backgroundColor": "#FFF7EF",
-        "foregroundImage": "./assets/images/icon.png"
+        "backgroundColor": "#EEE4D9",
+        "foregroundImage": "./assets/images/adaptive-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "blockedPermissions": [
