@@ -1091,6 +1091,9 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontSize: FontSize.caption,
     fontWeight: '600',
+    // 두 줄이 되는 경우(소원을 들어줘 보너스가 붙을 때)가 있어서 가운데로
+    // 맞춥니다. 왼쪽 정렬이면 짧은 둘째 줄이 한쪽으로 쏠려 보입니다.
+    textAlign: 'center',
   },
   keepsake: {
     flexDirection: 'row',

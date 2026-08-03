@@ -869,8 +869,11 @@ export function applyCare(pet: Pet, actionId: CareActionId, now: number = Date.n
     // 이 돌봄으로 청년기를 넘어섰을 수도 있으니 엔딩 확정을 한 번 더 거칩니다.
     pet: sealEnding(next, now),
     applied: true,
+    // 보너스는 **줄을 바꿔서** 붙입니다. 한 줄로 이으면 말풍선 폭을 넘겨
+    // 아무 데서나 접히는데, 그러면 반응 문장이 두 동강 난 것처럼 보입니다.
+    // 줄을 나눠 두면 "말 한 줄 + 보상 한 줄"로 읽힙니다.
     message: granted
-      ? `${action.wishGrantedReaction} (+${GameConfig.wishBonusExp} EXP)`
+      ? `${action.wishGrantedReaction}\n+${GameConfig.wishBonusExp} EXP`
       : action.reaction,
     grewInto: after.id === before.id ? null : after,
     grewFrom: after.id === before.id ? null : before,
