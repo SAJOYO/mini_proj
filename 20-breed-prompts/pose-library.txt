@@ -1,0 +1,150 @@
+====================================================================
+SHARED POSE LIBRARY + FRAMING BLOCK
+Used by: bichon-frise-prompts.txt / golden-retriever-prompts.txt /
+         poodle-prompts.txt
+====================================================================
+
+HOW TO USE
+  Each breed prompt has two swappable slots:
+
+     [[FRAMING]]   <- always the same block, see below
+     [[POSE]]      <- pick ONE pose at random from the library below
+
+  Pick the pose in your own code and string-substitute it into the
+  prompt. Do NOT paste the whole list into the prompt and ask the model
+  to "choose one" - image models blend the options instead of picking,
+  and you get a dog with six legs.
+
+  Every pose below is breed-neutral and drops in as-is. Check the
+  STAGE column before picking: not every pose suits every age.
+
+====================================================================
+[[FRAMING]]  - paste into every prompt, never changes
+====================================================================
+
+FRAMING - BOTH SUBJECTS TOGETHER: this is a photo of the two of them,
+not a dog photo with someone in the background. The person and the dog
+are both fully inside the frame, both in sharp focus on the same focal
+plane, physically touching or within arm's reach. Medium shot taken at
+roughly the dog's eye level. The dog reads as the main subject, but the
+person's body and hands are clearly visible and actively part of the
+picture - never reduced to a blurred shape behind. Only the far
+background falls out of focus.
+
+====================================================================
+[[POSE]]  - pick ONE at random
+====================================================================
+
+STAGE KEY:  P = puppy   A = adolescent   Y = young adult   S = senior
+
+--------------------------------------------------------------------
+POSE 01 - FLOOR SPRAWL          STAGES: P A Y S
+--------------------------------------------------------------------
+Lying belly-down and completely melted into the floor, hind legs kicked
+straight out behind in a loose frog-leg splay, front legs stretched
+forward. The chin rests directly on the floor between the front paws.
+The person sits on the floor right beside the dog, one hand resting on
+its back. Head laid slightly off-center, not squared to the camera,
+eyes looking softly up from floor level. Boneless, unposed.
+
+--------------------------------------------------------------------
+POSE 02 - LEANING IN            STAGES: P A Y S
+--------------------------------------------------------------------
+Sitting upright pressed against the person's leg, the whole body
+leaning into them for balance, head tipped all the way back to look up
+at their face. Three-quarter view, body angled away from the camera.
+The person's hand rests on the dog's chest or shoulder. Looking at
+THEM, never at the camera. Trusting, settled, unposed.
+
+--------------------------------------------------------------------
+POSE 03 - PAWS UP               STAGES: P A Y
+--------------------------------------------------------------------
+Standing on its hind legs with both front paws planted on the person's
+knee, stretching upward, body fully extended and slightly off-balance.
+The person leans down toward it, both hands reaching in. Head tilted
+up and back, gaze locked on their face, never on the camera. Eager,
+pushy, unposed.
+
+--------------------------------------------------------------------
+POSE 04 - WALKING TOGETHER      STAGES: A Y S
+--------------------------------------------------------------------
+Mid-stride walking alongside the person, near-profile view, one front
+paw lifted mid-step, body clearly moving through the frame. The person
+walks beside it in step, one hand hanging down near its head. The dog's
+head is turned up and sideways toward them. Gaze on THEM or off-frame,
+never on the camera. Loose, in motion, unposed.
+
+--------------------------------------------------------------------
+POSE 05 - ASLEEP IN THE LAP     STAGES: P Y S
+--------------------------------------------------------------------
+Curled up asleep in the person's lap, body folded into a tight comma,
+head tucked against their forearm, one paw hanging loose over their
+knee. The person's hands rest on the dog, their torso and folded legs
+clearly in frame. Eyes fully closed. Deeply asleep, heavy, unposed.
+
+--------------------------------------------------------------------
+POSE 06 - CARRIED               STAGES: P A S
+--------------------------------------------------------------------
+Held up against the person's chest, scooped under the front legs, the
+body hanging soft and relaxed against them. The person's arms and upper
+body fill one side of the frame. The dog's head rests back against
+their shoulder, gaze drifting off-frame to the side, never on the
+camera. Limp, content, unposed.
+
+--------------------------------------------------------------------
+POSE 07 - BELLY UP              STAGES: P A Y
+--------------------------------------------------------------------
+Rolled over onto its back on the floor, all four legs folded up in the
+air, spine twisted, head upside-down and tipped back. The person
+crouches over it, one hand on its belly. Mouth open in an upside-down
+grin, eyes squinted shut or looking off-frame, never at the camera.
+Ridiculous, undignified, unposed.
+
+--------------------------------------------------------------------
+POSE 08 - SIDE BY SIDE          STAGES: A Y S
+--------------------------------------------------------------------
+Sitting shoulder to shoulder with the person, both seen from behind at
+a three-quarter angle, both looking away from the camera out at the
+same distant view. The dog's head is in profile, ears and coat catching
+the light. The person's arm rests along the dog's back. Neither faces
+the camera. Quiet, companionable, unposed.
+
+--------------------------------------------------------------------
+POSE 09 - PLAY BOW              STAGES: P A Y
+--------------------------------------------------------------------
+Front end dropped low to the ground, chest and elbows down, rump and
+tail high in the air, mid-bounce and about to spring. Three-quarter
+view, body angled away from the camera. The person crouches opposite,
+hands out, mid-laugh. The dog's head is up and cocked to one side,
+locked on THEM, never on the camera. Springy, coiled, unposed.
+
+--------------------------------------------------------------------
+POSE 10 - CHIN ON THE ARM       STAGES: P Y S
+--------------------------------------------------------------------
+Sitting or lying close beside the person with its chin dropped onto
+their forearm or thigh, the full weight of the head resting on them.
+Near-profile view. The person's other hand comes over to cradle the
+side of its face. Eyes half-closed, gaze drifting off-frame, never on
+the camera. Heavy, affectionate, unposed.
+
+====================================================================
+STAGE -> AVAILABLE POSES (for the random picker)
+====================================================================
+  PUPPY       01 02 03 05 06 07 09 10
+  ADOLESCENT  01 02 03 04 06 07 08 09
+  YOUNG ADULT 01 02 03 04 05 07 08 09 10
+  SENIOR      01 02 04 05 06 08 10
+
+====================================================================
+NOTES
+- Every pose already carries the anti-stare rule ("never at the
+  camera"). Keep that clause when editing - dropping it brings back
+  the flat front-facing avatar look.
+- Poses 03, 07 and 09 are high-motion. If the coat texture gets
+  smeared, add "frozen mid-motion, sharp, no motion blur on the dog".
+- Pose 06 (carried) hides the legs and tail. Skip it if the shot needs
+  to show the full body silhouette of the breed.
+- Pose 08 shows the dog from behind. It is the only pose where the
+  face is not readable - do not use it as the single hero image of a
+  life stage.
+====================================================================

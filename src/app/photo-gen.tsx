@@ -38,9 +38,12 @@ import { buildKeepsakePrompt } from '@/lib/photo-prompt';
  *   prompt    위 둘로 만든 생성용 문장 (src/lib/photo-prompt.ts)
  *   caption   사진에 얹을 한 줄 ("청소년기의 마지막 날")
  *
- * 문장을 다듬고 싶으면 이 화면이 아니라 **src/lib/photo-prompt.ts**를 고치세요.
- * 네 단계가 한 표에 모여 있고, 그림체·조명 같은 공통 부분은 KEEPSAKE_STYLE
- * 한 곳에 있습니다. 여기서 문자열을 이어붙이면 단계마다 그림체가 갈립니다.
+ * 문장을 다듬고 싶으면 이 화면을 고치지 마세요. 견종·단계별 묘사는
+ * **20-breed-prompts/*.md**가 원본이고, `npm run prompts:build`가 그것을
+ * constants/breed-prompt.ts로 찍어냅니다. 원본 사진을 지키는 규칙만
+ * src/lib/photo-prompt.ts에 있습니다. 여기서 문자열을 이어붙이면 단계마다
+ * 그림체가 갈립니다.
+ * (넘어갈 문장을 눈으로 확인하려면 `npm run keepsake:prompt -- <품종> <단계>`)
  *
  * ⚠️ 결과 URL은 **ComfyUI 서버가 켜져 있는 동안만** 유효합니다. 서버를 끄면
  *    이미 만든 사진도 안 보입니다. 오래 남기려면 받아서 저장해야 합니다.
