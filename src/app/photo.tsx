@@ -268,15 +268,27 @@ export default function PhotoScreen() {
             },
           ]}>
           {photoUri ? (
+            // 주소가 **준비된 뒤에만** 그립니다. 예전에는 photoUri 만 보고 먼저
+            // 그리면서 주소 자리에 undefined 를 넘겼는데, 그 빈 source 를 붙잡고
+            // 있다가 진짜 주소가 와도 다시 안 그리는 일이 있었습니다. 폰에서
+            // 사진을 고른 직후 미리보기만 빈칸으로 남던 게 이것입니다
+            // (파일은 멀쩡해서 판정도 사진 찍기 화면도 정상이었습니다).
+            //
+            // key 를 주소로 두는 것도 같은 이유입니다 — 사진을 바꾸면 새로
+            // 붙어서, 앞 사진이 남아 있을 여지를 없앱니다.
+            //
             // contain 입니다 — 잘라내지 않고 사진 전체를 보여줍니다.
             // 웹에서는 피커의 1:1 자르기(allowsEditing)가 동작하지 않아서 원본
             // 비율 그대로 들어옵니다. cover 로 두면 세로 사진의 위아래가, 가로
             // 사진의 좌우가 잘려서 "이 사진으로 판정된다"와 화면이 어긋납니다.
-            <Image
-              source={{ uri: previewUri ?? undefined }}
-              style={styles.preview}
-              contentFit="contain"
-            />
+            previewUri ? (
+              <Image
+                key={previewUri}
+                source={{ uri: previewUri }}
+                style={styles.preview}
+                contentFit="contain"
+              />
+            ) : null
           ) : (
             <View style={styles.slotEmpty}>
               <Text style={styles.slotIcon}>📷</Text>
