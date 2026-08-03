@@ -43,6 +43,7 @@ export {
 export { BREED_AXES } from '@/lib/persona/presets';
 export {
   DEFAULT_MIX,
+  anchorMix,
   dominantBreed,
   resolveMix,
   synthesize,

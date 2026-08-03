@@ -105,8 +105,21 @@ export async function markSwipeHintSeen(): Promise<void> {
  * 넘길 수 있습니다. 필요하면 URI 로 다시 읽습니다 (`lib/image.ts`).
  */
 export type StoredAnalysis = {
-  /** [{ breed, ratio }] — persona 의 resolveMix 가 받는 형태 그대로. */
+  /**
+   * [{ breed, ratio }] — persona 의 resolveMix 가 받는 형태 그대로.
+   *
+   * **모델이 낸 그대로 둡니다.** 사용자가 2·3순위를 골라도 이 숫자는 안 고칩니다.
+   * 고친 값을 저장하면 "모델이 뭐라고 했는지"를 영영 못 되찾습니다.
+   */
   mix: { breed: string; ratio: number }[];
+  /**
+   * 결과 화면에서 사용자가 고른 품종. 성격과 생김새의 기준점이 됩니다.
+   *
+   * 선택 필드입니다 — 이 기능이 생기기 전에 저장된 결과에는 없고, 그 경우
+   * 지분 1위가 기준점이 되어 예전과 똑같이 동작합니다.
+   * 쓸 때는 `anchorMix(resolveMix(mix), chosen)` 로 순서를 맞춰 주세요.
+   */
+  chosen?: string;
   /** 얼굴 관찰 한두 문장. 없을 수 있습니다. */
   face: string;
   /** breedId → 근거 한 문장. 없을 수 있습니다. */
