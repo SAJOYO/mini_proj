@@ -6,6 +6,7 @@
     "@expo/ui": "~57.0.7",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.8",
+    "expo-build-properties": "~57.0.8",
     "expo-constants": "~57.0.7",
     "expo-device": "~57.0.1",
     "expo-file-system": "~57.0.1",
@@ -14,6 +15,7 @@
     "expo-image": "~57.0.1",
     "expo-image-picker": "~57.0.6",
     "expo-linking": "~57.0.4",
+    "expo-media-library": "~57.0.3",
     "expo-router": "~57.0.8",
     "expo-splash-screen": "~57.0.5",
     "expo-status-bar": "~57.0.1",
@@ -56,7 +58,9 @@
     "format": "prettier --write . && eslint . --fix",
     "check": "npm run typecheck && npm run lint",
     "persona:chat": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/test-persona-chat.ts",
-    "persona:prompt": "tsx scripts/inspect-persona-prompt.ts"
+    "persona:prompt": "tsx scripts/inspect-persona-prompt.ts",
+    "prompts:build": "tsx scripts/build-breed-prompts.ts && prettier --write --log-level warn src/constants/breed-prompt.ts",
+    "keepsake:prompt": "tsx scripts/inspect-keepsake-prompt.ts"
   },
   "engines": {
     "node": ">=20.19.4"

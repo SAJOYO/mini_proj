@@ -16,6 +16,19 @@
  * 우리는 그 안의 **세 곳만** 덮어씁니다(NODES 참고). 워크플로가 바뀌면
  * JSON을 새로 받아 덮어쓰고 NODES의 번호만 맞춰주세요 — 이 파일의 로직은
  * 그대로 둬도 됩니다.
+ *
+ * ## 주소가 http:// 라서 생기는 일 (안드로이드)
+ *
+ * 안드로이드 9부터 앱의 평문 http 통신을 기본으로 막습니다. 팀원 노트북에서
+ * 도는 서버라 인증서를 붙일 수가 없어서 이 주소는 https가 될 수 없습니다.
+ *
+ * 그래서 app.json 에 usesCleartextTraffic 을 켜 뒀습니다(expo-build-properties).
+ * **빌드할 때 정해지는 값**이라, 끄면 설치한 앱에서 사진 찍기가 통째로
+ * 실패합니다 — 그때 나오는 건 "연결하지 못했어요" 한 줄뿐이라 원인을 찾기
+ * 어렵습니다.
+ *
+ * 헷갈리기 쉬운 점: 브라우저와 Expo Go 는 이 정책 대상이 아닙니다. 폰에서
+ * 주소가 열리고 Expo Go 로도 잘 되는데 **APK 에서만** 안 되면 이걸 의심하세요.
  */
 
 import workflowTemplate from './krea2_identity_edit.json';
@@ -39,13 +52,19 @@ const NODES = {
 /**
  * 결과를 기다리는 한도.
  *
- * 실측으로 한 장에 **약 3분 40초**가 걸렸습니다(192.168.0.93, steps 10).
- * 앞에 대기 중인 작업이 있으면 그만큼 더 걸리므로 넉넉히 잡되, 무한정
- * 기다리지는 않게 해서 서버가 죽었을 때 화면이 영영 도는 것을 막습니다.
+ * 한 장에 걸리는 시간은 **서버 기계에 따라 크게 다릅니다.** 처음 잰 곳에서는
+ * 3분 40초였는데(192.168.0.93, steps 10), 옮긴 뒤로는 8분쯤 걸립니다.
+ *
+ * 게다가 GPU가 하나라 **앞 작업이 끝나야 내 것이 시작됩니다.** 웹과 폰에서
+ * 한 장씩 걸면 뒤엣것은 16분을 기다리게 됩니다. 10분이었을 때 실제로 여기서
+ * 잘렸습니다 — 서버는 멀쩡히 그리고 있는데 앱만 포기한 상황이었습니다.
+ *
+ * 그래서 30분입니다. 서버가 죽었을 때 화면이 영영 도는 것을 막는다는 원래
+ * 목적에는 이 정도로도 충분합니다.
  *
  * 실제로 재는 쪽은 lib/photo-job.tsx입니다. 이 파일은 값만 들고 있습니다.
  */
-export const TIMEOUT_MS = 10 * 60 * 1000;
+export const TIMEOUT_MS = 30 * 60 * 1000;
 export const POLL_INTERVAL_MS = 1500;
 
 /** 서버 주소가 없거나 응답이 이상할 때 화면에 그대로 보여줄 수 있는 에러. */
@@ -87,12 +106,115 @@ export async function ping(): Promise<boolean> {
   }
 }
 
+/** ComfyUI가 /upload/image 에 돌려주는 것. */
+type UploadResponse = { name?: string; subfolder?: string };
+
+/** 서버에 닿지도 못한 경우. 주소·와이파이·서버 켜짐 중 하나입니다. */
+function unreachable(where: string, cause: unknown): ComfyError {
+  return new ComfyError(
+    `${where} 요청이 서버에 닿지 못했습니다: ${cause}`,
+    '사진 생성 서버에 닿지 못했어요. 같은 와이파이인지, 서버가 켜져 있는지 확인해 주세요.',
+  );
+}
+
+/**
+ * 폰에서 사진 파일을 올립니다.
+ *
+ * ## 왜 fetch + FormData 가 아닌가
+ *
+ * RN 의 전통적인 파일 업로드는 FormData 에 `{uri, name, type}` 객체를 얹는
+ * 것이었습니다. **폰에서는 이제 안 됩니다.** 요청이 나가기도 전에 터집니다.
+ *
+ *     Error: Unsupported FormDataPart implementation
+ *
+ * Expo SDK 54부터 전역 fetch 가 표준(WinterCG) 구현으로 바뀌었는데, 그쪽은
+ * FormData 항목을 문자열 · Blob · bytes() 를 가진 객체 셋만 받습니다.
+ * RN 고유의 `{uri}` 객체는 어디에도 안 걸립니다.
+ * (expo/src/winter/fetch/convertFormData.ts 에서 던집니다)
+ *
+ * 화면에는 "서버에 연결하지 못했어요"로 보여서, 한동안 방화벽과 네트워크를
+ * 뒤졌습니다. 정작 네트워크는 멀쩡했습니다 — 에러를 로그에 안 남기고 있던
+ * 것이 진짜 문제였습니다.
+ *
+ * expo-file-system 의 upload 는 파일을 **네이티브에서 직접** 멀티파트로
+ * 올립니다. fetch 를 아예 거치지 않아서 이 문제가 없고, 사진 바이트가
+ * 자바스크립트로 올라왔다 내려가지도 않습니다.
+ */
+async function uploadFromFile(photoUri: string): Promise<UploadResponse> {
+  const { File, UploadType } = await import('expo-file-system');
+
+  let result;
+  try {
+    result = await new File(photoUri).upload(`${baseUrl()}/upload/image`, {
+      uploadType: UploadType.MULTIPART,
+      // ComfyUI 가 파일을 찾는 필드 이름. 바꾸면 서버가 400을 줍니다.
+      fieldName: 'image',
+      mimeType: 'image/jpeg',
+      // 같은 이름으로 계속 올려도 input 폴더가 안 불어나게.
+      parameters: { overwrite: 'true' },
+    });
+  } catch (e) {
+    throw unreachable('업로드', e);
+  }
+
+  if (result.status < 200 || result.status >= 300) {
+    throw new ComfyError(
+      `업로드 실패 (${result.status}) ${result.body}`.trim(),
+      '사진을 서버에 올리지 못했어요. 잠시 후 다시 시도해 주세요.',
+    );
+  }
+
+  try {
+    return JSON.parse(result.body) as UploadResponse;
+  } catch {
+    throw new ComfyError(
+      `업로드 응답을 읽지 못했습니다: ${result.body}`,
+      '사진 업로드 결과가 이상해요.',
+    );
+  }
+}
+
+/** 웹에서 사진 바이트를 꺼내 올립니다. */
+async function uploadFromBlob(photoUri: string): Promise<UploadResponse> {
+  // 탭을 새로고침했으면 blob이 이미 무효라 여기서 실패합니다.
+  let blob: Blob;
+  try {
+    blob = await (await fetch(photoUri)).blob();
+  } catch {
+    throw new ComfyError(
+      `사진을 읽지 못했습니다: ${photoUri}`,
+      '올린 사진을 찾을 수 없어요. 사진을 다시 골라 주세요.',
+    );
+  }
+
+  const form = new FormData();
+  form.append('image', blob, 'source.jpg');
+  // 같은 이름으로 계속 올리면 ComfyUI가 source (1).jpg 식으로 새 파일을
+  // 만들고 input 폴더가 계속 불어납니다. 덮어쓰게 둡니다.
+  form.append('overwrite', 'true');
+
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl()}/upload/image`, { method: 'POST', body: form });
+  } catch (e) {
+    throw unreachable('업로드', e);
+  }
+
+  if (!res.ok) {
+    throw new ComfyError(
+      `업로드 실패 (${res.status})`,
+      '사진을 서버에 올리지 못했어요. 잠시 후 다시 시도해 주세요.',
+    );
+  }
+
+  return (await res.json()) as UploadResponse;
+}
+
 /**
  * 사용자 사진을 ComfyUI의 input 폴더로 올리고 파일명을 받습니다.
  *
- * 웹과 네이티브의 처리가 다릅니다. 웹의 photoUri는 blob: URI라 파일 객체를
- * 꺼내야 하고(fetch로 한 번 읽습니다), 네이티브는 file:// 경로를 그대로
- * FormData에 얹으면 런타임이 알아서 읽어줍니다.
+ * 웹과 폰은 올리는 방법이 다릅니다 — 웹의 photoUri는 blob: 이라 바이트를
+ * 꺼내야 하고, 폰은 파일이라 네이티브가 직접 올립니다. 위 두 함수 참고.
  */
 async function uploadImage(uri: string): Promise<string> {
   // 웹에서는 사진이 IndexedDB에 있고 저장된 값은 열쇠뿐입니다. 실제 주소로 바꿉니다.
@@ -104,44 +226,9 @@ async function uploadImage(uri: string): Promise<string> {
     );
   }
 
-  const form = new FormData();
+  const isFile = photoUri.startsWith('file://') || photoUri.startsWith('content://');
+  const data = isFile ? await uploadFromFile(photoUri) : await uploadFromBlob(photoUri);
 
-  if (photoUri.startsWith('file://') || photoUri.startsWith('content://')) {
-    // 네이티브 — RN의 FormData는 이 모양의 객체를 파일로 취급합니다.
-    // 표준 FormData 타입에는 없는 형태라 타입을 한 번 눌러줍니다.
-    form.append('image', {
-      uri: photoUri,
-      name: 'source.jpg',
-      type: 'image/jpeg',
-    } as unknown as Blob);
-  } else {
-    // 웹(blob:) 또는 data: — 실제 바이트를 꺼내서 올립니다.
-    // 탭을 새로고침했으면 blob이 이미 무효라 여기서 실패합니다.
-    let blob: Blob;
-    try {
-      blob = await (await fetch(photoUri)).blob();
-    } catch {
-      throw new ComfyError(
-        `사진을 읽지 못했습니다: ${photoUri}`,
-        '올린 사진을 찾을 수 없어요. 사진을 다시 골라 주세요.',
-      );
-    }
-    form.append('image', blob, 'source.jpg');
-  }
-
-  // 같은 이름으로 계속 올리면 ComfyUI가 source (1).jpg 식으로 새 파일을
-  // 만들고 input 폴더가 계속 불어납니다. 덮어쓰게 둡니다.
-  form.append('overwrite', 'true');
-
-  const res = await fetch(`${baseUrl()}/upload/image`, { method: 'POST', body: form });
-  if (!res.ok) {
-    throw new ComfyError(
-      `업로드 실패 (${res.status})`,
-      '사진을 서버에 올리지 못했어요. 잠시 후 다시 시도해 주세요.',
-    );
-  }
-
-  const data = (await res.json()) as { name?: string; subfolder?: string };
   if (!data.name) {
     throw new ComfyError('업로드 응답에 name이 없습니다', '사진 업로드 결과가 이상해요.');
   }

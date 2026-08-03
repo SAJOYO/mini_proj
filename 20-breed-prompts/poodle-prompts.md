@@ -107,7 +107,7 @@ visible and part of the picture, never a blurred shape behind. Only the
 far background falls out of focus.
 
 GAZE - unforced and natural. The person is either looking down at the
-dog with a soft expression. The dog is
+dog with a soft expression or glancing toward the camera. The dog is
 either looking up at the person or giving the camera a relaxed, candid
 glance with its head tilted off-axis. The two eyelines must make sense
 together. If either one looks at the camera it reads as a casual
@@ -154,7 +154,7 @@ visible and part of the picture, never a blurred shape behind. Only the
 far background falls out of focus.
 
 GAZE - unforced and natural. The person is either looking down at the
-dog with a soft expression. The dog is
+dog with a soft expression or glancing toward the camera. The dog is
 either looking up at the person or giving the camera a relaxed, candid
 glance with its head tilted off-axis. The two eyelines must make sense
 together. If either one looks at the camera it reads as a casual
