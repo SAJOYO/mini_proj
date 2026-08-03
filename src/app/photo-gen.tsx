@@ -9,14 +9,23 @@ import { Screen } from '@/components/screen';
 import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { canDownload, downloadBlob, latestOfStage, loadPhoto } from '@/lib/album';
+import {
+  latestOfStage,
+  photoUri as albumPhotoUri,
+  revokePhotoUri,
+  SAVE_DENIED_MESSAGE,
+  SAVE_SUCCESS_MESSAGE,
+  savePhotoToDevice,
+  type PhotoEntry,
+} from '@/lib/album';
+import { notify } from '@/lib/dialog';
 import { resolvePhoto } from '@/lib/image';
 import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
 import { buildKeepsakePrompt } from '@/lib/photo-prompt';
 
 /**
- * 사진 만들기 화면.
+ * 사진 찍기 화면.
  *
  * 게임에서 넘어온 재료(사진 + 프롬프트)로 ComfyUI에 사진 한 장을 주문하고
  * 결과를 보여줍니다. 서버와 이야기하는 부분은 전부 lib/comfy.ts에 있습니다 —
@@ -31,9 +40,12 @@ import { buildKeepsakePrompt } from '@/lib/photo-prompt';
  *   prompt    위 둘로 만든 생성용 문장 (src/lib/photo-prompt.ts)
  *   caption   사진에 얹을 한 줄 ("청소년기의 마지막 날")
  *
- * 문장을 다듬고 싶으면 이 화면이 아니라 **src/lib/photo-prompt.ts**를 고치세요.
- * 네 단계가 한 표에 모여 있고, 그림체·조명 같은 공통 부분은 KEEPSAKE_STYLE
- * 한 곳에 있습니다. 여기서 문자열을 이어붙이면 단계마다 그림체가 갈립니다.
+ * 문장을 다듬고 싶으면 이 화면을 고치지 마세요. 견종·단계별 묘사는
+ * **20-breed-prompts/*.md**가 원본이고, `npm run prompts:build`가 그것을
+ * constants/breed-prompt.ts로 찍어냅니다. 원본 사진을 지키는 규칙만
+ * src/lib/photo-prompt.ts에 있습니다. 여기서 문자열을 이어붙이면 단계마다
+ * 그림체가 갈립니다.
+ * (넘어갈 문장을 눈으로 확인하려면 `npm run keepsake:prompt -- <품종> <단계>`)
  *
  * ⚠️ 결과 URL은 **ComfyUI 서버가 켜져 있는 동안만** 유효합니다. 서버를 끄면
  *    이미 만든 사진도 안 보입니다. 오래 남기려면 받아서 저장해야 합니다.
@@ -82,8 +94,10 @@ export default function PhotoGenScreen() {
   }, [pet?.photoUri]);
 
   /** 이 단계에서 마지막으로 만든 사진. 앨범에는 그 전 것들도 남아 있습니다. */
-  const [latest, setLatest] = useState<Blob | null>(null);
+  const [latest, setLatest] = useState<PhotoEntry | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  /** 내려받는 중. 연타로 갤러리에 같은 사진이 여러 장 들어가는 것을 막습니다. */
+  const [saving, setSaving] = useState(false);
 
   /**
    * 화면에 띄우려고 만든 blob: URL.
@@ -94,7 +108,7 @@ export default function PhotoGenScreen() {
   const objectUrl = useRef<string | null>(null);
   useEffect(() => {
     return () => {
-      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+      if (objectUrl.current) revokePhotoUri(objectUrl.current);
     };
   }, []);
 
@@ -110,15 +124,17 @@ export default function PhotoGenScreen() {
   useEffect(() => {
     let alive = true;
 
-    latestOfStage(stage)
-      .then((entry) => (entry ? loadPhoto(entry.id) : null))
-      .then((blob) => {
-        if (!alive || !blob) return;
-        if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-        objectUrl.current = URL.createObjectURL(blob);
-        setLatest(blob);
-        setResult(objectUrl.current);
-      });
+    latestOfStage(stage).then(async (entry) => {
+      if (!alive || !entry) return;
+
+      const uri = await albumPhotoUri(entry.id);
+      if (!alive || !uri) return;
+
+      if (objectUrl.current) revokePhotoUri(objectUrl.current);
+      objectUrl.current = uri;
+      setResult(uri);
+      setLatest(entry);
+    });
 
     return () => {
       alive = false;
@@ -142,21 +158,43 @@ export default function PhotoGenScreen() {
   }
 
   /**
+   * 만든 사진을 기기에 내려받습니다.
+   *
+   * 결과를 반드시 말해줍니다. 폰에서는 갤러리로 들어가서 화면상 아무 변화가
+   * 없는데, 아무 말이 없으면 눌린 건지조차 알 수 없습니다.
+   */
+  async function handleSave(entry: PhotoEntry) {
+    setSaving(true);
+    try {
+      const result = await savePhotoToDevice(entry);
+      if (result === 'saved') notify('사진을 내려받았어요', SAVE_SUCCESS_MESSAGE);
+      else if (result === 'denied') notify('저장 권한이 필요해요', SAVE_DENIED_MESSAGE);
+      else notify('사진을 내려받지 못했어요', '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
    * 게임 화면으로 돌아갑니다.
    *
-   * 그냥 back()을 부르면 **새로고침한 뒤에 터집니다.** 새로고침하면 앱 안의
-   * 화면 이력이 사라져서 돌아갈 곳이 없어지거든요("GO_BACK was not handled").
-   * 이 화면은 생성이 몇 분씩 걸려서 그 사이 새로고침하는 일이 흔하고,
-   * 링크로 바로 열고 들어오는 경우도 마찬가지입니다.
+   * back() 이 아니라 **언제나 게임으로** 보냅니다. 여기 들어오는 길이 여럿이라
+   * (앨범, 성장 직후 배너) back() 은 그때그때 다른 곳으로 떨어집니다. 사진을
+   * 다 만들고 나면 가고 싶은 곳은 대개 게임이지 앨범이 아닙니다 — 앨범으로
+   * 돌아가 봐야 거기서 또 한 번 나가야 합니다.
+   *
+   * replace 인 것도 일부러입니다. push 로 쌓으면 뒤로 가기가 이 화면으로
+   * 되돌아옵니다. 새로고침 뒤에 이력이 없어 back() 이 터지던 문제
+   * ("GO_BACK was not handled")도 이걸로 같이 없어집니다 — 이 화면은 생성이
+   * 몇 분씩 걸려서 그 사이 새로고침하는 일이 흔합니다.
    */
   function goBack() {
-    if (router.canGoBack()) router.back();
-    else router.replace('/game');
+    router.replace('/game');
   }
 
   return (
     <Screen>
-      <Text style={[styles.title, { color: c.text }]}>사진 만들기</Text>
+      <Text style={[styles.title, { color: c.text }]}>사진 찍기</Text>
       <Text style={[styles.note, { color: c.textSecondary }]}>
         {caption || '함께한 모습을 한 장으로 남겨 드려요.'}
       </Text>
@@ -245,7 +283,7 @@ export default function PhotoGenScreen() {
           앨범에 한 장씩 쌓이고, 여기에는 마지막 것이 보입니다.
         */}
         <Button
-          label={result ? '한 장 더 만들기' : '사진 만들기'}
+          label={result ? '한 장 더 찍기' : '사진 찍기'}
           onPress={run}
           loading={busy}
           disabled={missing !== null || otherBusy}
@@ -262,12 +300,12 @@ export default function PhotoGenScreen() {
           것이고 브라우저가 지울 수도 있지만, 내려받은 파일은 사용자 것이
           됩니다. 그래서 보관에 성공했어도 버튼을 남겨둡니다.
         */}
-        {latest && canDownload() ? (
+        {latest ? (
           <Button
-            label="내려받기"
+            label={saving ? '내려받는 중...' : '내려받기'}
             variant="secondary"
-            onPress={() => downloadBlob(latest, `${breed}-${stage}.png`)}
-            disabled={busy}
+            onPress={() => void handleSave(latest)}
+            disabled={busy || saving}
           />
         ) : null}
         {/*

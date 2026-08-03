@@ -12,6 +12,14 @@ type ActivityBarProps = {
   durationMs: number;
   /** 게이지가 다 차면 호출됩니다. 여기서 실제 돌봄을 적용하세요. */
   onDone: () => void;
+  /**
+   * 게이지만 얇게 그립니다(카드·문구 없이).
+   *
+   * 돌봄 버튼 안에 넣으려고 만든 모양입니다. 버튼 아래쪽 한 줄(사이드이펙트
+   * 안내가 있던 자리)에 그대로 들어가서, 어느 버튼이 진행 중인지가 버튼
+   * 자신에게 나타납니다.
+   */
+  compact?: boolean;
 };
 
 /**
@@ -23,7 +31,7 @@ type ActivityBarProps = {
  *
  * 효과는 **끝날 때** 적용됩니다(onDone). 먹기 전에 배가 부르면 어색하니까요.
  */
-export function ActivityBar({ label, emoji, durationMs, onDone }: ActivityBarProps) {
+export function ActivityBar({ label, emoji, durationMs, onDone, compact }: ActivityBarProps) {
   const c = useTheme();
   const [progress] = useState(() => new Animated.Value(0));
 
@@ -43,6 +51,28 @@ export function ActivityBar({ label, emoji, durationMs, onDone }: ActivityBarPro
     return () => animation.stop();
   }, [progress, durationMs, onDone]);
 
+  const track = (
+    <View
+      style={[
+        compact ? styles.trackCompact : styles.track,
+        { backgroundColor: c.surfaceAlt, borderColor: c.border },
+      ]}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}>
+      <Animated.View
+        style={[
+          styles.fill,
+          {
+            backgroundColor: c.primary,
+            width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          },
+        ]}
+      />
+    </View>
+  );
+
+  if (compact) return track;
+
   return (
     <View style={[styles.wrap, { backgroundColor: c.surface, borderColor: c.primary }]}>
       <View style={styles.labelRow}>
@@ -50,20 +80,7 @@ export function ActivityBar({ label, emoji, durationMs, onDone }: ActivityBarPro
         <Text style={[styles.label, { color: c.text }]}>{label}입니다...</Text>
       </View>
 
-      <View
-        style={[styles.track, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}
-        accessibilityRole="progressbar"
-        accessibilityLabel={label}>
-        <Animated.View
-          style={[
-            styles.fill,
-            {
-              backgroundColor: c.primary,
-              width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
-            },
-          ]}
-        />
-      </View>
+      {track}
     </View>
   );
 }
@@ -91,6 +108,20 @@ const styles = StyleSheet.create({
   },
   track: {
     height: 8,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  trackCompact: {
+    // 돌봄 버튼의 안내 한 줄 자리에 들어갑니다. 그 줄 높이(캡션 글자)와
+    // 비슷해야 진행 중일 때만 버튼이 늘었다 줄지 않습니다.
+    height: 6,
+    // 버튼 안쪽 폭을 다 채우지 않습니다. 테두리까지 닿으면 게이지가 버튼의
+    // 일부처럼 보여서, 진행 중이라는 것보다 버튼이 이상해 보입니다.
+    width: '70%',
+    alignSelf: 'center',
+    marginTop: 4,
+    marginBottom: 4,
     borderRadius: Radius.pill,
     borderWidth: 1,
     overflow: 'hidden',

@@ -164,6 +164,25 @@ async function extractPetName(raw: string, currentName: string | null): Promise<
   }
 }
 
+/**
+ * 키보드 위에 얹히는 도구 모음(추천 단어·클립보드·설정 줄)의 대략적인 높이.
+ *
+ * **어림값입니다. 발표까지 쓰는 임시방편입니다.**
+ *
+ * 안드로이드에서 키보드가 입력창을 덮는 문제를 쫓다가 알게 된 것 —
+ * RN 이 알려주는 키보드 높이에는 이 줄이 **안 들어갑니다.** 자판 부분만 재서
+ * 줍니다. 그래서 그만큼 덜 올라가고, 딱 그 줄 높이만큼 입력창이 가립니다.
+ *
+ * 진짜 높이는 키보드 앱마다·설정마다 다르고 JS 에서 알아낼 방법이 없습니다.
+ * 제대로 고치려면 `react-native-keyboard-controller`(안드로이드 IME 인셋을
+ * 직접 읽음)가 필요한데, 네이티브 모듈이라 Expo Go 에서 못 쓰고 개발 빌드를
+ * 따로 만들어야 합니다. 그건 발표 뒤에 하기로 했습니다.
+ *
+ * 값을 조정할 일이 생기면 (덜 올라가면 키우고, 빈 공간이 뜨면 줄이세요)
+ * 여기 숫자만 고치면 됩니다.
+ */
+const KEYBOARD_TOOLBAR_HEIGHT = 64;
+
 export default function ChatScreen() {
   const c = useTheme();
   const router = useRouter();
@@ -388,7 +407,8 @@ export default function ChatScreen() {
     <Screen edges={['top']}>
       <KeyboardAvoidingView
         style={styles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior="padding"
+        keyboardVerticalOffset={KEYBOARD_TOOLBAR_HEIGHT}>
         <View style={styles.header}>
           <View style={[styles.avatar, { backgroundColor: c.surfaceAlt }]}>
             <Text style={styles.avatarFace}>🐶</Text>

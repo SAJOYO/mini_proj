@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { FloatingEmojis } from '@/components/floating-emojis';
 import { PetCharacter } from '@/components/pet-character';
@@ -114,7 +122,16 @@ export function PetAvatar({
   onPat,
 }: PetAvatarProps) {
   const c = useTheme();
-  const size = stage.avatarSize;
+
+  /**
+   * 화면 폭의 절반. 단, 단계가 정한 상한(AVATAR_SIZE)까지만.
+   *
+   * 고정값이던 것을 폭에 맞췄습니다 — 작은 폰에서는 캐릭터가 화면을 다 먹고,
+   * 태블릿·웹에서는 가운데가 허전했습니다. 세로가 아니라 **가로**를 기준으로
+   * 삼는 건, 캐릭터 옆으로 잘리는 일이 없어야 하기 때문입니다.
+   */
+  const { width } = useWindowDimensions();
+  const size = Math.round(Math.min(width * 0.5, stage.avatarSize));
 
   const [bounce] = useState(() => new Animated.Value(0));
 
@@ -358,9 +375,11 @@ export function PetAvatar({
         {sad ? ' · 시무룩' : ''}
       </Text>
 
-      {onPat ? (
-        <Text style={[styles.patHint, { color: c.textSecondary }]}>눌러서 쓰다듬기</Text>
-      ) : null}
+      {/*
+        "눌러서 쓰다듬기" 안내는 뺐습니다. 캐릭터를 눌러보는 건 설명 없이도
+        하게 되는 일이라, 한 줄을 더 두는 값보다 화면이 조용한 값이 큽니다.
+        (누르는 동작 자체는 그대로입니다 — 위 Pressable 의 onPat)
+      */}
     </View>
   );
 }

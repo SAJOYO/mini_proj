@@ -188,7 +188,7 @@
   },
   "84": {
     "inputs": {
-      "prompt": "35mm film-look vector composited in.\nA short-haired younirt crouches on apark\nlawn, one hand resthtly as she looks tothe\nside. Late afternood dandelions in the\nforeground, hazy tree line behind, warm backlight, shallow depth of\nfield, fine grain.\n\nBounding across then Retrieveradolescent\nCandid action pose,ee-quarter ornear-profile\nview, body clearly front legs stretched\nforward, hind legs pushing off, head snapped to one side chasing\nsomething out of fr never at the camera.\nLoose, springy, unposed.\nRounded head (1.2x body, long legsslightly\ntoo long for the frist. VISIBLE EARS:soft\ndrop ears flying up big for the head.\nSmooth flowing outline, coat mid-length and glossy, feathering just\ncoming in — thin wirom the back of thelegs\nand the underside o\nLarge bright wide-set dark brown eyes #4A3728 with a white highlight\ndot\nupper-right, lengthening muzzle, dark oval nose, mouth slightly open\nin\nan easy grin. Longer neck, cream chest ruff filling in, tail carried\nhigh with a half-gr\nAlert, energetic, mischievous.\nCoat golden #E5B168ream #F4DCB0; ears\ndeeper gold #CE9550; nose, eyes, mouth #4A3728; one uniform thick\nwarm\nbrown outline #7A5636.",
+      "prompt": "(자리 표시자 - 앱이 항상 덮어씁니다. lib/comfy.ts의 buildWorkflow 참고. 실제 문장은 lib/photo-prompt.ts가 만듭니다.)",
       "grounding_px": 768,
       "system_prompt": "",
       "clip": [
