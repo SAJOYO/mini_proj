@@ -5,31 +5,44 @@
  * 넘깁니다. 이 파일에는 **화면이 없습니다** — 표와 순수 함수만 있습니다.
  * (게임 규칙이 lib/game.ts에 모여 있는 것과 같은 이유입니다)
  *
+ * ## 문장은 어디서 오는가
+ *
+ * 견종별 묘사는 여기서 쓰지 않습니다. `20-breed-prompts/*.md`에 사람이 읽고
+ * 고치는 원본이 있고, `npm run prompts:build`가 그것을 constants/breed-prompt.ts로
+ * 찍어냅니다. 이 파일은 찍혀 나온 조각을 **순서대로 붙이기만** 합니다.
+ *
+ *   BREED_ART_STYLE  그림체 한 줄        (100개 단계 공통)
+ *   IDENTITY_RULE    무엇을 지키고 무엇을 그릴지  ← 여기서만 씁니다
+ *   BREED_GAZE       시선 규칙            (100개 단계 공통)
+ *   stages[stage]    subject / pose / look / palette
+ *   anchors          품종 고정 특징을 끝에서 한 번 더
+ *
  * ## 왜 단계별로 문장이 다른가
  *
  * 캐릭터는 이미지가 아니라 SVG로 그리는데, 단계별 생김새는 constants/pet.ts의
  * LIFE_STAGES가 비율로 정합니다(아기는 머리 1.22배·발 1.5배, 노년은 털이
  * 희끗해지고 눈이 흐려짐). 생성 쪽은 그 SVG를 보지 못하므로, 같은 내용을
  * 말로 옮겨줘야 화면 속 캐릭터와 사진 속 캐릭터가 같은 아이로 보입니다.
+ * 넘어가는 이미지는 사용자 사진 한 장뿐입니다 — 아바타는 문장으로만 갑니다.
  *
- * ## 왜 스타일 문구는 한 곳에 있는가
+ * ## 왜 배경을 지정하지 않는가
  *
- * 네 장이 앨범에 나란히 놓입니다. 단계마다 그림체가 달라지면 성장 기록이
- * 아니라 서로 다른 그림 네 장이 됩니다. 그래서 **달라지는 것(생김새·자세)과
- * 고정되는 것(그림체·조명·구도)을 갈라 두고**, 고정 쪽은 KEEPSAKE_STYLE
- * 하나만 고치면 네 장이 같이 바뀌게 했습니다.
+ * 마크다운 원본에는 단계마다 장소가 적혀 있습니다("창가 나무 바닥", "공원
+ * 잔디"). 그건 인물까지 처음부터 그리는 전제로 쓰인 문장이고, 우리는 사용자
+ * 사진에서 인물과 배경을 그대로 가져옵니다. 두 곳에서 배경을 정하면 서로
+ * 싸우므로 빌드 스크립트가 장소·프레이밍 문단을 걷어냅니다.
  *
- * ## 한국어로 쓴 이유
+ * ## 왜 영문인가
  *
- * 품종 이름을 BREEDS[breed].label에서 그대로 가져다 쓰기 때문입니다.
- * 생성 쪽에서 영문 프롬프트가 필요하면 constants/pet.ts의 BreedPreset에 영문
- * 이름을 한 줄 추가하고 아래 breedLabel 자리만 바꾸면 됩니다 — 문장 구조는
- * 그대로 둬도 됩니다.
+ * 원본 프롬프트가 영문으로 쓰이고 다듬어졌습니다. 품종 이름도 문서의
+ * subject("a Beagle puppy")에 이미 들어 있어서 BREEDS[breed].label이 필요
+ * 없습니다. 앨범에 얹는 caption만 한국어로 남습니다 — 그건 모델에 넘어가지
+ * 않고 화면에만 쓰입니다.
  */
 
-import { BREEDS, type BreedId } from '@/constants/pet';
+import { BREED_ART_STYLE, BREED_GAZE, BREED_PROMPTS } from '@/constants/breed-prompt';
+import type { BreedId } from '@/constants/pet';
 import type { StageId } from '@/lib/game';
-import { objectParticle } from '@/lib/korean';
 
 /** 사진 생성 쪽에 넘길 한 세트. */
 export type KeepsakePrompt = {
@@ -40,53 +53,38 @@ export type KeepsakePrompt = {
 };
 
 /**
- * 네 장이 공유하는 그림체·조명·구도.
+ * 원본 사진에서 무엇을 지키고, 무엇을 새로 그릴지.
  *
- * 여기를 바꾸면 네 단계가 **같이** 바뀝니다. 한 단계만 다르게 하고 싶어지면
- * 그건 대개 STAGE_LOOK의 look/pose에 넣어야 할 내용입니다.
+ * 이 한 문단이 기념 사진과 "강아지 그림"을 가릅니다. 빼면 모델이 인물까지
+ * 새로 그려서 남의 얼굴이 나옵니다.
+ *
+ * 마크다운의 프레이밍 문단을 대신합니다. 원본은 "얼굴이 잘리지 않게 넓게
+ * 잡아라"까지 지시하는데, 그건 구도를 처음부터 정할 때 쓰는 말입니다.
+ * 여기서는 구도를 원본 사진에서 받아오므로 **무엇이 바뀌면 안 되는지**만
+ * 말합니다.
  */
-const KEEPSAKE_STYLE = [
-  '부드러운 파스텔 톤의 손그림 스타일',
-  '따뜻한 실내 조명',
-  '배경은 단순하게',
-  '정사각형 구도',
-].join(', ');
+const IDENTITY_RULE = [
+  'Keep the person from the source photo. Their face, hair, build and clothing',
+  'come from that photo and must stay recognisably the same person, in the same',
+  'setting and the same light. Do not restyle them and do not replace the',
+  'background. The dog is the only thing added to the picture.',
+  'Square 1:1 crop. Both the person and the dog are fully inside the frame, both',
+  "in sharp focus on the same focal plane, physically touching or within arm's",
+  'reach - this is a photo of the two of them, not a dog photo with someone in',
+  'the background.',
+].join(' ');
 
-type StageLook = {
-  /** 그 단계의 생김새. LIFE_STAGES가 실제로 그리는 비율을 말로 옮긴 것입니다. */
-  look: string;
-  /** 그 단계다운 자세와 거리감. 아기는 안기고, 노년은 기대옵니다. */
-  pose: string;
-  /**
-   * 사진에 남길 한 줄.
-   *
-   * 기념 사진은 **떠나온 단계**를 기록합니다(성장한 직후에 찍으니까요).
-   * 그래서 "마지막 날"입니다. 노년기만 다음 단계가 없어서 표현이 다릅니다.
-   */
-  caption: string;
-};
-
-const STAGE_LOOK: Record<StageId, StageLook> = {
-  baby: {
-    look: '머리가 몸보다 크고 발이 큼직한 아기, 귀는 작게 접혀 있고 눈은 아직 반쯤 뜬',
-    pose: '품에 폭 안겨 조심스럽게 카메라를 바라보는',
-    caption: '영유아기의 마지막 날',
-  },
-  teen: {
-    look: '몸은 거의 다 컸는데 귀와 발만 먼저 커서 비율이 어정쩡한',
-    pose: '옆에 바싹 붙어 앉아 장난기 어린 표정을 짓는',
-    caption: '청소년기의 마지막 날',
-  },
-  young: {
-    look: '다 자라 균형 잡힌 몸에 털에 윤기가 도는',
-    pose: '나란히 서서 든든하게 카메라를 마주 보는',
-    caption: '청년기의 마지막 날',
-  },
-  elder: {
-    look: '주둥이와 눈가에 흰 털이 섞이고 귀가 살짝 처진, 눈빛이 부드럽게 흐려진',
-    pose: '무릎에 머리를 기대고 눈을 반쯤 감은',
-    caption: '노년기의 어느 날',
-  },
+/**
+ * 사진에 남길 한 줄.
+ *
+ * 기념 사진은 **떠나온 단계**를 기록합니다(성장한 직후에 찍으니까요).
+ * 그래서 "마지막 날"입니다. 노년기만 다음 단계가 없어서 표현이 다릅니다.
+ */
+const STAGE_CAPTION: Record<StageId, string> = {
+  baby: '영유아기의 마지막 날',
+  teen: '청소년기의 마지막 날',
+  young: '청년기의 마지막 날',
+  elder: '노년기의 어느 날',
 };
 
 /**
@@ -97,17 +95,23 @@ const STAGE_LOOK: Record<StageId, StageLook> = {
  * 이미지는 생성 쪽에 따로 넘깁니다.
  */
 export function buildKeepsakePrompt(breed: BreedId, stage: StageId): KeepsakePrompt {
-  const look = STAGE_LOOK[stage];
-  const breedLabel = BREEDS[breed].label;
+  const { anchors, stages } = BREED_PROMPTS[breed];
+  const { subject, pose, look, palette } = stages[stage];
 
   return {
     prompt: [
-      // 품종은 실행 중에 정해지므로 조사를 하드코딩하면 "도베르만를"이 됩니다.
-      `${breedLabel}${objectParticle(breedLabel)} 캐릭터로 그린 ${look.look} 반려동물이,`,
-      `함께 올린 사진 속 인물과 ${look.pose} 기념 사진.`,
-      '인물의 얼굴과 분위기는 원본 사진을 따르고, 반려동물만 캐릭터로 그립니다.',
-      KEEPSAKE_STYLE + '.',
-    ].join(' '),
-    caption: look.caption,
+      BREED_ART_STYLE,
+      IDENTITY_RULE,
+      BREED_GAZE,
+      // 문서와 같은 순서: 무엇인지 → 어떤 자세인지 → 어떻게 생겼는지 → 무슨 색인지.
+      [`THE DOG: ${subject}`, pose, look, palette].join('\n'),
+      // 앵커는 look 안에 이미 녹아 있지만, 문서의 Notes가 권하는 대로 끝에서
+      // 한 번 더 못을 박습니다. 이게 빠지면 무늬가 다른 견종과 섞입니다.
+      [
+        "BREED ANCHORS - keep every one of these, never substitute another breed's wording:",
+        ...anchors.map((a) => `- ${a}`),
+      ].join('\n'),
+    ].join('\n\n'),
+    caption: STAGE_CAPTION[stage],
   };
 }

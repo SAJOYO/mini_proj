@@ -56,7 +56,9 @@
     "format": "prettier --write . && eslint . --fix",
     "check": "npm run typecheck && npm run lint",
     "persona:chat": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/test-persona-chat.ts",
-    "persona:prompt": "tsx scripts/inspect-persona-prompt.ts"
+    "persona:prompt": "tsx scripts/inspect-persona-prompt.ts",
+    "prompts:build": "tsx scripts/build-breed-prompts.ts && prettier --write --log-level warn src/constants/breed-prompt.ts",
+    "keepsake:prompt": "tsx scripts/inspect-keepsake-prompt.ts"
   },
   "engines": {
     "node": ">=20.19.4"
