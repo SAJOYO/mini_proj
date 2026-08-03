@@ -26,7 +26,11 @@ function chatConfig(): { apiKey: string; model: string; baseUrl: string } | null
   return { apiKey, model, baseUrl: baseUrl.replace(/\/+$/, '') };
 }
 
-async function foldIntoSummary(existing: string | null, turns: TurnRow[]): Promise<string | null> {
+async function foldIntoSummary(
+  existing: string | null,
+  turns: TurnRow[],
+  petName: string | undefined,
+): Promise<string | null> {
   const config = chatConfig();
   if (!config) return null;
 
@@ -34,14 +38,27 @@ async function foldIntoSummary(existing: string | null, turns: TurnRow[]): Promi
     .map((t) => `${t.role === 'user' ? '사용자' : '캐릭터'}: ${t.content}`)
     .join('\n');
 
+  // "이름은 요약에 적지 마라"는 지시만으로는 모델이 다른 표현으로 새어
+  // 나오게 적는 걸 실제로 막지 못했습니다(실측 확인됨). 대신 진짜 이름을
+  // 정답으로 못박아 주고, 그것만 쓰거나 아예 빼도록 시킵니다 — "적지 마라"
+  // 보다 "이것만 써라"가 더 안정적으로 지켜집니다.
+  const nameRule = petName
+    ? `반려동물의 진짜 이름은 "${petName}"이다. 요약에 이름을 적어야 한다면 반드시 ` +
+      `이 이름 그대로만 써라. 대화 속에서 다른 이름이 나왔더라도 그건 진짜 이름이 ` +
+      `아니니 "${petName}"으로 바로잡아 적고, 다른 이름은 절대 적지 마라.`
+    : '반려동물의 이름은 앱이 따로 관리하고 아직 정해지지 않았을 수 있다. ' +
+      '대화 속에 어떤 이름이 나왔더라도 그게 진짜 이름인지 알 수 없으니 요약에 이름을 적지 마라.';
+
   const prompt = [
     '다음은 사용자와 반려동물 캐릭터의 대화 중 오래된 부분이다.',
     existing ? `기존 요약:\n${existing}\n` : '',
     `새로 압축할 대화:\n${transcript}`,
     '',
     '기존 요약과 새 대화를 합쳐 하나의 한국어 요약으로 다시 써라.',
-    '사용자가 언급한 이름, 취향, 사건, 감정 등 이후 대화에서 캐릭터가 기억해야 할',
-    '사실만 남기고 잡담과 말투는 생략한다. 5문장 이내.',
+    '사용자의 취향, 사건, 감정 등 이후 대화에서 캐릭터가 기억해야 할 사실만',
+    '남기고 잡담과 말투는 생략한다. 5문장 이내.',
+    '',
+    nameRule,
   ]
     .filter(Boolean)
     .join('\n');
@@ -79,13 +96,13 @@ async function foldIntoSummary(existing: string | null, turns: TurnRow[]): Promi
  * 보이게 됩니다. 실패 시 턴을 지우지 않으므로 다음 메시지가 올 때 다시
  * 시도됩니다 — 데이터가 사라지지 않습니다.
  */
-export async function maybeSummarize(deviceId: string): Promise<void> {
+export async function maybeSummarize(deviceId: string, petName?: string): Promise<void> {
   const turns = getTurns(deviceId);
   if (turns.length === 0) return;
 
   try {
     const existing = getSummary(deviceId);
-    const merged = await foldIntoSummary(existing, turns);
+    const merged = await foldIntoSummary(existing, turns, petName);
     if (!merged) return;
 
     setSummary(deviceId, merged);

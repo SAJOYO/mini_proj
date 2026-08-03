@@ -235,6 +235,19 @@ export default function ChatScreen() {
       setNamingMode(false);
       void savePetName(name);
 
+      // 서버에도 남겨둡니다. `name`(방금 막 지어진 이름)을 정답으로 같이
+      // 보내서, 요약이 이 대화에서 이름을 다른 걸로 잘못 굳히지 않게 합니다.
+      if (deviceId.current) {
+        void appendTurns(
+          deviceId.current,
+          [
+            { role: 'user', content: text },
+            { role: 'assistant', content: confirmation },
+          ],
+          name,
+        );
+      }
+
       busy.current = false;
       setSending(false);
       return;
@@ -273,11 +286,16 @@ export default function ChatScreen() {
       ]);
 
       // 저장은 부가 기능입니다 — 실패해도 대화 자체는 막지 않습니다(memory-client 참고).
+      // displayName을 같이 보내서 요약이 다른 이름을 사실로 굳히지 않게 합니다.
       if (deviceId.current) {
-        void appendTurns(deviceId.current, [
-          { role: 'user', content: text },
-          { role: 'assistant', content: answer },
-        ]);
+        void appendTurns(
+          deviceId.current,
+          [
+            { role: 'user', content: text },
+            { role: 'assistant', content: answer },
+          ],
+          displayName,
+        );
       }
     } catch (error) {
       // 원본은 화면에 뿌리지 않되 버리지도 않습니다. 개발 중에는 원인을 봐야 합니다.

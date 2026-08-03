@@ -34,6 +34,9 @@ app.get('/conversations/:deviceId', (req, res) => {
 app.post('/conversations/:deviceId/messages', (req, res) => {
   const { deviceId } = req.params;
   const turns = req.body?.turns;
+  // 요약이 이름을 스스로 추측하다 대화 속 잘못된 이름을 사실로 굳히는 걸 막기
+  // 위한 정답. 클라이언트가 지금 화면에 쓰고 있는 이름을 그대로 보내줍니다.
+  const petName = typeof req.body?.petName === 'string' ? req.body.petName : undefined;
 
   if (!Array.isArray(turns) || turns.length === 0 || !turns.every(isChatTurn)) {
     res.status(400).json({ error: 'turns는 { role, content }[] 여야 합니다.' });
@@ -44,7 +47,7 @@ app.post('/conversations/:deviceId/messages', (req, res) => {
   res.status(204).end();
 
   // 응답은 이미 나갔습니다 — 요약은 부가 작업이라 응답을 기다리게 하지 않습니다.
-  void maybeSummarize(deviceId);
+  void maybeSummarize(deviceId, petName);
 });
 
 app.post('/conversations/:deviceId/reset', (req, res) => {

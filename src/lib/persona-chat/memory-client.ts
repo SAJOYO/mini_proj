@@ -59,7 +59,13 @@ export async function fetchConversation(deviceId: string): Promise<StoredConvers
  * fire-and-forget 하도록 설계했습니다. 저장이 한 번 안 됐다고 대화 자체를
  * 막을 이유가 없습니다.
  */
-export async function appendTurns(deviceId: string, turns: ChatTurn[]): Promise<void> {
+export async function appendTurns(
+  deviceId: string,
+  turns: ChatTurn[],
+  /** 지금 화면에 쓰고 있는 반려동물 이름. 서버가 요약을 만들 때 이 이름을
+   * 정답으로 삼아서, 대화 속 다른 이름이 사실로 굳어지는 걸 막습니다. */
+  petName?: string,
+): Promise<void> {
   const base = baseUrl();
   if (!base || turns.length === 0) return;
 
@@ -67,7 +73,7 @@ export async function appendTurns(deviceId: string, turns: ChatTurn[]): Promise<
     const res = await fetch(`${base}/conversations/${encodeURIComponent(deviceId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ turns }),
+      body: JSON.stringify({ turns, petName }),
     });
     if (!res.ok) console.warn(`[memory] 저장 실패 (${res.status})`);
   } catch (error) {
