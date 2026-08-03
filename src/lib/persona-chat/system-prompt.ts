@@ -124,14 +124,25 @@ export type PromptBlock = { text: string; cacheable: boolean };
  *
  * 앞 블록은 전 사용자 공유(캐시 히트율 최고), 뒤 블록은 캐릭터별입니다.
  * 캐시를 쓰지 않는 공급자라면 그냥 이어붙이면 됩니다.
+ *
+ * `summary`는 서버가 오래된 대화를 압축해 돌려준 롱텀 메모리입니다(있으면).
+ * 기기마다 다른 내용이라 `cacheable: false` — 캐릭터 블록과 달리 사용자
+ * 사이에 공유되면 안 됩니다.
  */
 export function systemPrompt(
   card: PersonaCard,
   name: string,
   species: SpeciesKind = 'dog',
+  summary?: string | null,
 ): PromptBlock[] {
-  return [
+  const blocks: PromptBlock[] = [
     { text: SHARED_RULES, cacheable: true },
     { text: characterBlock(card, name, species), cacheable: true },
   ];
+
+  if (summary) {
+    blocks.push({ text: `# 이전 대화 요약\n${summary}`, cacheable: false });
+  }
+
+  return blocks;
 }

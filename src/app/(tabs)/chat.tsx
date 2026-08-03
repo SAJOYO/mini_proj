@@ -19,8 +19,9 @@ import { useAuth } from '@/lib/auth';
 import { chatTarget } from '@/lib/llm/config';
 import { anchorMix, dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@/lib/persona';
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
+import { appendTurns, fetchConversation } from '@/lib/persona-chat/memory-client';
 import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
-import { loadAnalysis } from '@/lib/storage';
+import { ensureDeviceId, loadAnalysis } from '@/lib/storage';
 
 /**
  * 반려동물과 대화하는 화면 (오른쪽 페이지).
@@ -58,6 +59,10 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  /** 서버가 압축해 돌려준 이전 대화 요약(롱텀 메모리). 저장 서버가 없으면 계속 null. */
+  const [summary, setSummary] = useState<string | null>(null);
+  /** 이 기기의 익명 ID. 대화를 저장/복원할 때 씁니다. 준비되기 전엔 저장을 건너뜁니다. */
+  const deviceId = useRef<string | null>(null);
   /**
    * 입력창 위에 잠깐 뜨는 안내.
    *
@@ -88,6 +93,26 @@ export default function ChatScreen() {
         setMix(anchorMix(resolveMix(saved.mix), saved.chosen as BreedId | undefined));
       }
       setAnalyzed(saved !== null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 새로고침하면 화면의 말풍선은 항상 빈 대화로 시작합니다 — 원문 턴을
+  // 다시 그리지 않습니다. 대신 서버가 압축해 둔 요약(summary)만 가져와서
+  // 시스템 프롬프트에 끼워 넣습니다. "화면은 비었지만 캐릭터는 이전 대화를
+  // 기억한다"가 이 기능의 핵심이라, turns는 일부러 messages에 반영하지 않습니다.
+  useEffect(() => {
+    let cancelled = false;
+    ensureDeviceId().then(async (id) => {
+      if (cancelled) return;
+      deviceId.current = id;
+
+      const { summary: savedSummary } = await fetchConversation(id);
+      if (cancelled) return;
+
+      setSummary(savedSummary);
     });
     return () => {
       cancelled = true;
@@ -134,11 +159,25 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
 
     try {
-      const answer = await client.reply({ model: CHAT.model, card, name: petName, history });
+      const answer = await client.reply({
+        model: CHAT.model,
+        card,
+        name: petName,
+        history,
+        summary,
+      });
       setMessages((prev) => [
         ...prev,
         { id: `a-${prev.length}`, role: 'assistant', content: answer },
       ]);
+
+      // 저장은 부가 기능입니다 — 실패해도 대화 자체는 막지 않습니다(memory-client 참고).
+      if (deviceId.current) {
+        void appendTurns(deviceId.current, [
+          { role: 'user', content: text },
+          { role: 'assistant', content: answer },
+        ]);
+      }
     } catch (error) {
       // 원본은 화면에 뿌리지 않되 버리지도 않습니다. 개발 중에는 원인을 봐야 합니다.
       console.warn('[chat] 요청 실패:', error);

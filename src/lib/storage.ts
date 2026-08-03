@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 
 /**
  * 로컬 저장소 얇은 래퍼.
@@ -18,6 +19,7 @@ const Keys = {
   pet: '@pet/pet',
   photoJob: '@pet/photoJob',
   album: '@pet/album',
+  deviceId: '@pet/deviceId',
 } as const;
 
 /** 로컬에만 존재하는 사용자. 비밀번호는 저장하지 않습니다. */
@@ -62,6 +64,23 @@ export async function clearUser(): Promise<void> {
     Keys.analysis,
     Keys.pet,
   ]);
+}
+
+/**
+ * 채팅 대화를 서버에 저장할 때 "누구 대화인지" 구분하는 익명 ID.
+ *
+ * 로그인이 없는 프로젝트라 기기가 곧 사용자입니다. 없으면 한 번 만들어서
+ * 저장하고, 그 뒤로는 항상 같은 값을 돌려줍니다. 닉네임(로그아웃하면
+ * 지워짐)과 달리 이 값은 `clearUser()`가 건드리지 않습니다 — 로그아웃/재로그인
+ * 해도 같은 기기의 대화 기록은 그대로 이어져야 합니다.
+ */
+export async function ensureDeviceId(): Promise<string> {
+  const existing = await AsyncStorage.getItem(Keys.deviceId);
+  if (existing) return existing;
+
+  const id = Crypto.randomUUID();
+  await AsyncStorage.setItem(Keys.deviceId, id);
+  return id;
 }
 
 /** 사용자가 고른 사진의 로컬 URI. 아직 안 골랐으면 null. */
