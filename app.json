@@ -44,6 +44,14 @@
           "photosPermission": "나와 닮은 동물을 찾기 위해 사진을 선택할 수 있도록 앨범 접근을 허용해 주세요.",
           "cameraPermission": "나와 닮은 동물을 찾기 위해 사진을 촬영할 수 있도록 카메라 접근을 허용해 주세요."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
