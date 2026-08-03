@@ -1,9 +1,15 @@
-# 나를 닮은 반려동물 다마고치 🐾
+# 독플갱어 🐾
 
-사진으로 나와 닮은 동물을 찾아 캐릭터로 키우고, 대화까지 하는 앱.
+사진 한 장으로 나와 닮은 강아지를 찾아, 캐릭터로 키우고, 대화하고, 함께한 기념 사진까지
+만드는 앱.
 
-이 저장소는 **팀 공용 베이스라인**입니다. 로딩 → 시작 → 로그인 → 사진 업로드까지 동작하고,
-각자 맡은 기능은 이 위에 붙여 나갑니다.
+```
+사진 올리기 → 닮은 품종 판정 → 캐릭터로 부화 → 돌보며 4단계 성장 → 대화
+                                                  └→ 기념 사진 생성 → 앨범
+```
+
+**웹과 안드로이드 앱 양쪽에서 돕니다.** 개발은 주로 웹(`npm run web`)으로 하고,
+폰은 Expo Go나 설치용 APK로 확인합니다.
 
 ---
 
@@ -34,67 +40,90 @@ npm run web
 > ⚠️ **yarn / pnpm / bun 쓰지 마세요.** 다른 버전이 깔려서 "나는 되는데 너는 안 되는" 상황이 생깁니다.
 > 락 파일이 섞이지 않게 `.gitignore`로 막아뒀습니다.
 
-### 2. 화면 보기 — 웹으로 (폰도 모바일 브라우저)
+### 2. 화면 보기 — 웹으로
 
 ```bash
 npm run web
 ```
 
-브라우저가 열립니다. 개발은 이걸로 하세요.
+브라우저가 열립니다. 고치고 바로 보는 작업은 이게 제일 빠릅니다.
 
-> ℹ️ **폰 확인은 모바일 브라우저로 합니다. Expo Go / 네이티브 앱은 이번 범위가 아닙니다.**
->
-> 이 프로젝트는 **SDK 57**인데 스토어의 Expo Go는 SDK 54까지만 지원해서 QR을 찍으면
-> "버전이 맞지 않는다"는 화면이 나옵니다. SDK를 내리거나 개발 빌드(`eas build`)를
-> 만들면 되지만, 멘토링에서 **미니 프로젝트니까 모바일 웹 환경까지만 테스트하자고
-> 결정**했습니다.
-> 폰에서는 아래처럼 모바일 브라우저로 열어 반응형까지만 확인합니다.
+### 3. 폰에서 보기
 
-#### 폰에서 열어보기 (모바일 웹)
+두 가지 길이 있습니다. **고치면서 볼 때는 Expo Go**, **완성된 앱을 확인할 때는 APK**입니다.
 
-1. PC에서 `npm run web` 실행
-2. 폰과 PC를 **같은 Wi-Fi**에 연결
-3. 폰 브라우저에서 `http://<PC의 로컬 IP>:8081` 접속
-   (IP 확인: Windows `ipconfig` → IPv4 주소 / macOS `ipconfig getifaddr en0`)
+#### Expo Go (개발용)
 
-안 열리면 PC 방화벽에서 8081 포트가 막힌 경우가 많습니다.
+```bash
+npm start
+```
 
-#### 웹에서 확인할 수 없는 것
+폰과 PC를 **같은 Wi-Fi**에 두고, Expo Go에서 `exp://<PC의 로컬 IP>:8081` 로 접속합니다.
+(IP 확인: Windows `ipconfig` → IPv4 / macOS `ipconfig getifaddr en0`)
 
-웹은 `react-native-web`으로 도는 거라 네이티브와 다릅니다. 네이티브 열은 참고용이며,
-**이번 프로젝트에서는 검증하지 않습니다.**
+> ⚠️ **스토어의 Expo Go는 안 됩니다.** 이 프로젝트는 SDK 57이라 [expo.dev/go](https://expo.dev/go)
+> 에서 **SDK 57용 APK**를 받아 설치해야 합니다. iOS는 우회 방법이 사실상 없어서
+> **안드로이드 기준**입니다.
 
-|                 | 웹 (`npm run web`)         | 폰 (네이티브 — 범위 밖) |
-| --------------- | -------------------------- | ----------------------- |
-| `Alert`         | **동작 안 함** (아래 참고) | 정상                    |
-| 카메라 촬영     | 불가                       | 가능                    |
-| 저장소          | `localStorage`             | 네이티브 저장소         |
-| 고른 사진의 URI | `blob:` — 탭 닫으면 무효   | 파일 경로, 유지됨       |
-| 애니메이션      | CSS                        | 네이티브 드라이버       |
+#### APK (설치해서 확인)
+
+`eas build` 로 만든 설치 파일입니다. 아래 [배포](#배포-apk-만들기) 참고.
+
+#### 웹과 폰이 다른 지점
+
+웹은 `react-native-web`으로 도는 것이라 브라우저가 대신해 주는 일이 많습니다.
+**둘 다 지원하지만 갈리는 곳이 있어서, 한쪽에서 됐다고 다른 쪽도 된다고 보면 안 됩니다.**
+
+|                 | 웹 (`npm run web`)         | 폰 (네이티브)                 |
+| --------------- | -------------------------- | ----------------------------- |
+| `Alert`         | **동작 안 함** (아래 참고) | 정상                          |
+| 카메라 촬영     | 불가                       | 가능                          |
+| 저장소          | `localStorage`             | 네이티브 저장소               |
+| 만든 사진 보관  | IndexedDB                  | 파일 (`expo-file-system`)     |
+| 사진 내려받기   | 파일 다운로드              | 기기 갤러리                   |
+| 고른 사진의 URI | `blob:` — 탭 닫으면 무효   | 파일 경로, 유지됨             |
+| 애니메이션      | CSS                        | 네이티브 드라이버             |
+| `http://` 통신  | 그대로 됨                  | 기본 차단 (아래 ComfyUI 참고) |
+
+플랫폼이 갈리는 코드는 되도록 `src/lib/` 안에 가둡니다 — 화면은 어느 쪽인지 몰라도 되게
+(`album.ts`, `image.ts`, `dialog.ts`가 그런 예입니다).
 
 ### 명령어
 
 | 명령어                            | 설명                                         |
 | --------------------------------- | -------------------------------------------- |
 | `npm run web`                     | **개발용.** 브라우저로 실행                  |
-| `npm start`                       | 개발 서버 (QR 코드 — Expo Go는 범위 밖)      |
+| `npm start`                       | 개발 서버 (Expo Go로 접속)                   |
 | `npm run android` / `ios` / `web` | 해당 플랫폼으로 바로 실행                    |
-| `npm run typecheck`               | 타입 검사                                    |
-| `npm run lint`                    | 코드 검사                                    |
-| `npm run format`                  | 포맷 자동 정리 (저장 전에 돌리면 편함)       |
 | `npm run check`                   | 타입 + lint 한 번에. **PR 올리기 전에 필수** |
+| `npm run typecheck` / `lint`      | 따로 돌릴 때                                 |
+| `npm run format`                  | 포맷 자동 정리 (저장 전에 돌리면 편함)       |
+| `npm run test:persona`            | 순수 함수 테스트 (`src/lib/**/*.test.ts`)    |
+| `npm run prompts:build`           | 견종 프롬프트 문서 → 코드 생성 (아래 참고)   |
+| `npm run keepsake:prompt`         | 사진 생성에 실제로 나갈 문장 확인            |
+| `npm run persona:infer` / `chat`  | 판정·대화를 앱 없이 터미널에서 시험          |
+
+> 💡 `.env` 값은 **번들에 문자열로 박힙니다.** 값을 바꿨으면 `npm start -- --clear` 로
+> 캐시를 비우고 다시 띄우세요. 안 그러면 옛 값이 그대로 남습니다.
 
 ---
 
 ## 지금 동작하는 것
 
-| 화면        | 파일                | 하는 일                                             |
-| ----------- | ------------------- | --------------------------------------------------- |
-| 로딩        | `src/app/index.tsx` | 저장된 로그인·캐릭터 확인 → 시작/사진/게임으로 분기 |
-| 시작        | `src/app/start.tsx` | 앱 소개 + [시작하기]                                |
-| 로그인      | `src/app/login.tsx` | 닉네임 입력 → 기기에 저장                           |
-| 사진 업로드 | `src/app/photo.tsx` | 앨범/카메라로 사진 선택 → [분석하기] → 게임으로     |
-| 다마고치    | `src/app/game.tsx`  | 캐릭터 돌보기 · 4단계 성장 · 노년기 엔딩            |
+| 화면        | 파일                      | 하는 일                                             |
+| ----------- | ------------------------- | --------------------------------------------------- |
+| 로딩        | `src/app/index.tsx`       | 저장된 로그인·캐릭터 확인 → 시작/사진/게임으로 분기 |
+| 시작        | `src/app/start.tsx`       | 앱 소개 + [시작하기]                                |
+| 로그인      | `src/app/login.tsx`       | 닉네임 입력 → 기기에 저장                           |
+| 사진 업로드 | `src/app/photo.tsx`       | 앨범/카메라로 사진 선택 → [분석하기]                |
+| 판정 결과   | `src/app/result.tsx`      | 닮은 품종 후보 중 하나를 고름 → 캐릭터 부화         |
+| 다마고치    | `src/app/(tabs)/game.tsx` | 캐릭터 돌보기 · 4단계 성장 · 노년기 엔딩            |
+| 대화        | `src/app/(tabs)/chat.tsx` | 판정 결과로 만든 성격으로 대화                      |
+| 사진 찍기   | `src/app/photo-gen.tsx`   | 올린 사진 + 캐릭터로 기념 사진 생성                 |
+| 앨범        | `src/app/album.tsx`       | 만든 사진을 단계별로 모아 보기 · 내려받기           |
+
+**게임과 대화는 좌우 스와이프로 오갑니다.** `(tabs)` 폴더로 묶여 있고 탭바 대신 점
+인디케이터만 둡니다 — 괄호로 묶은 폴더는 주소에 나타나지 않아서 `/game`, `/chat` 그대로입니다.
 
 로그인은 **서버 없이 닉네임만 로컬에 저장**하는 방식입니다. 비밀번호는 받지도, 저장하지도 않아요.
 (진짜 인증이 필요해지면 `src/lib/auth.tsx`의 `signIn()` 내부만 갈아끼우면 됩니다.)
@@ -143,7 +172,7 @@ npm run web
 경고가 뜨니 예고 없이 사라지지는 않습니다.
 
 시연용으로 게임 화면 맨 아래에 개발 도구가 있습니다 (`__DEV__`에서만 보임):
-`다음 단계 →` · `영유아기로 ↺` · `스탯 0/30/100` · `여행 보내기 🧳`.
+`다음 단계 →` · `영유아기로 ↺` · `스탯 0/30/100` · `🍚/🎾/🛁 바라기` · `여행 보내기 🧳`.
 시간을 실제로 흘려 기다리지 않고 성장·방치·여행·엔딩을 확인할 수 있습니다.
 
 ---
@@ -154,27 +183,46 @@ npm run web
 src/
 ├─ app/              ← 화면. 파일 하나 = 경로 하나 (expo-router)
 │  ├─ _layout.tsx      루트 레이아웃. Provider들이 여기 있음
-│  ├─ index.tsx        "/"      로딩
-│  ├─ start.tsx        "/start" 시작
-│  ├─ login.tsx        "/login" 로그인
-│  ├─ photo.tsx        "/photo" 사진 업로드
-│  └─ game.tsx         "/game"  다마고치 게임
+│  ├─ index.tsx        "/"          로딩
+│  ├─ start.tsx        "/start"     시작
+│  ├─ login.tsx        "/login"     로그인
+│  ├─ photo.tsx        "/photo"     사진 업로드
+│  ├─ result.tsx       "/result"    판정 결과 · 품종 고르기
+│  ├─ photo-gen.tsx    "/photo-gen" 기념 사진 만들기
+│  ├─ album.tsx        "/album"     앨범
+│  └─ (tabs)/          스와이프로 오가는 두 화면 (주소에는 안 나타남)
+│     ├─ game.tsx      "/game"      다마고치 게임
+│     └─ chat.tsx      "/chat"      대화
 ├─ components/       ← 여러 화면이 같이 쓰는 UI
 │  ├─ screen.tsx       화면 껍데기 (배경·안전영역·여백)
 │  ├─ button.tsx       버튼
-│  ├─ pet-avatar.tsx   캐릭터가 보이는 자리 (지금은 이모지)
+│  ├─ pet-character.tsx  SVG 캐릭터. 품종·단계로 비율이 달라짐
+│  ├─ pet-avatar.tsx   캐릭터가 사는 자리 (반응·애니메이션)
 │  └─ stat-bar.tsx     0~100 스탯 게이지
 ├─ constants/
-│  └─ theme.ts         색상·여백·글자크기 토큰
+│  ├─ theme.ts         색상·여백·글자크기 토큰
+│  ├─ pet.ts           품종 표 · 단계별 생김새 비율(LIFE_STAGES)
+│  └─ breed-prompt.ts  ⚠️ 생성물. 20-breed-prompts/*.md 에서 만들어집니다
 ├─ hooks/
 │  └─ use-theme.ts     현재 테마 색상 가져오기
-└─ lib/
+└─ lib/               ← 화면 없는 규칙과 배관
    ├─ auth.tsx         로그인 상태 (useAuth)
    ├─ pet.tsx          키우는 캐릭터 상태 (usePet)
-   ├─ game.ts          게임 규칙. 화면 없는 순수 함수 + GameConfig
-   ├─ breeds.ts        품종 목록 — 임시 스텁 (닮은 동물 검색이 붙으면 삭제)
+   ├─ game.ts          게임 규칙. 순수 함수 + GameConfig
+   ├─ storage.ts       로컬 저장소 (AsyncStorage 래퍼)
+   ├─ album.ts         만든 사진 보관 (웹 IndexedDB / 폰 파일)
+   ├─ image.ts         고른 사진 다루기 (플랫폼 차이가 여기 모여 있음)
+   ├─ comfy.ts         ComfyUI 호출
+   ├─ photo-job.tsx    사진 생성 진행 상태 (화면 밖에서 폴링)
+   ├─ photo-prompt.ts  생성 문장 조립
    ├─ dialog.ts        알림·확인 창 (Alert 직접 쓰지 말고 이걸)
-   └─ storage.ts       로컬 저장소 (AsyncStorage 래퍼)
+   ├─ breed-inference/ 사진 → 닮은 품종 판정
+   ├─ persona/         품종 혼합 → 성격 카드
+   └─ persona-chat/    성격 카드 → 대화
+
+20-breed-prompts/    ← 견종별 사진 생성 프롬프트 **원본**(사람이 읽고 고침)
+scripts/             ← 앱 없이 돌려보는 도구들
+server/              ← 대화 요약 저장 서버 (선택)
 ```
 
 ---
@@ -267,25 +315,22 @@ if (!ok) return;
 | 동물과 대화하기 (페르소나)           | 장유빈, 임승현 |
 | 사진 만들어 공유하기                 | 김경빈         |
 
-붙여야 할 자리는 코드에 `TODO(이름)` 으로 표시해 뒀습니다.
+네 갈래가 각자 붙었고, 지금은 한 흐름으로 이어져 있습니다.
 
-| 자리                                    | 파일                               | 지금 상태                        |
-| --------------------------------------- | ---------------------------------- | -------------------------------- |
-| 닮은 동물 검색 (`TODO(홍가연)`)         | `src/app/photo.tsx` 의 `analyze()` | 강아지 품종 하나를 **랜덤 반환** |
-| 단계별 캐릭터 이미지 (`TODO(조윤주)`)   | `src/components/pet-avatar.tsx`    | 단계별 **이모지**로 대체 중      |
-| 동물과 대화하기 (`TODO(장유빈·임승현)`) | `src/app/game.tsx` 하단            | [대화하기] 버튼 비활성           |
+| 기능           | 들어간 자리                                              |
+| -------------- | -------------------------------------------------------- |
+| 닮은 동물 검색 | `src/lib/breed-inference/` → `src/app/result.tsx`        |
+| 캐릭터 · 게임  | `src/components/pet-character.tsx` · `src/lib/game.ts`   |
+| 대화           | `src/lib/persona/` · `src/lib/persona-chat/` · `server/` |
+| 사진 만들기    | `src/lib/comfy.ts` · `20-breed-prompts/`                 |
 
-**캐릭터 이미지 붙이는 법**: `<PetAvatar>`의 `imageUri` prop에 이미지 URI만 넘기면
-이모지가 이미지로 바뀝니다. `stage.id`가 `'baby' | 'teen' | 'young' | 'elder'`로
-오니 이걸로 골라 넘기면 되고, 게임 화면 코드는 건드릴 필요 없습니다.
-
-**품종 붙이는 법**: 게임 쪽은 품종 문자열만 받으면 되므로 `analyze()` 안의
-`pickRandomBreed()` 자리에 분석 결과를 넣으면 끝입니다. (`src/lib/breeds.ts`는 그때 삭제)
+**캐릭터는 이미지가 아니라 SVG로 그립니다.** 품종별 생김새와 단계별 비율(`LIFE_STAGES`)을
+코드가 조합해서, 20종 × 4단계를 그림 파일 없이 만듭니다.
 
 > ⚠️ **웹에서 사진 URI 주의**: `npm run web`에서 고른 사진은 `blob:` URI라 탭을 닫으면
-> 무효가 됩니다(문자열만 남고 가리키는 데이터가 사라짐). 폰에서는 파일 경로라 괜찮아요.
-> 캐릭터 생성이 사용자 사진을 입력으로 쓸 때, 웹에서 새로고침하면 원본이 사라지는
-> 점을 감안해 주세요.
+> 무효가 됩니다(문자열만 남고 가리키는 데이터가 사라짐). 그래서 원본은 IndexedDB에
+> 넣고 **열쇠 문자열**만 저장합니다 — 쓸 때 `resolvePhoto()`로 꺼냅니다.
+> 폰은 파일 경로라 그대로 살아 있습니다. 이 차이는 `src/lib/image.ts`에 모여 있습니다.
 
 ---
 
@@ -310,28 +355,42 @@ if (!ok) return;
 - 발표 끝나면 **키 폐기**
 - 앱을 외부에 배포하지 않기
 
-**어느 쪽이든 코드 짜기 전에 정하세요.** 4명이 각자 구현한 다음에 바꾸면 다 갈아엎어야 합니다.
+**지금은 B로 가고 있습니다.** 발표용이라 키를 앱에 넣되, 커밋하지 않고 발표 뒤 폐기합니다.
 
-`.env` 사용법:
+`.env` 사용법 (`.env.example` 참고):
 
 ```bash
 # .env  (커밋되지 않음)
-EXPO_PUBLIC_API_BASE_URL=https://...
+EXPO_PUBLIC_VISION_API_KEY=...      # 사진 판정
+EXPO_PUBLIC_CHAT_API_KEY=...        # 대화
+EXPO_PUBLIC_COMFY_URL=http://...    # 사진 생성 서버
 ```
 
 ```ts
-const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+const key = process.env.EXPO_PUBLIC_VISION_API_KEY;
 ```
+
+> ⚠️ **이름에 `EXPO_PUBLIC_` 이 있어야 치환됩니다.** 없으면 값이 `undefined` 로 들어가고,
+> 화면에는 "키가 없다"고만 보여서 원인을 찾기 어렵습니다.
+
+> 💡 **무료 한도**: 판정·대화는 Gemini 무료 등급을 씁니다. 분당·일일 한도가 따로 있어서
+> 리허설로 여러 번 돌리면 `429` 로 막힙니다. 한도는 **키가 아니라 구글 클라우드 프로젝트
+> 단위**라, 같은 프로젝트에서 키만 새로 뽑아도 안 풀립니다. 발표 때는 **판정을 미리 해둔
+> 상태로 시작**하는 편이 안전합니다(결과는 기기에 저장돼 있습니다).
 
 ---
 
 ## 사진 만들기 (ComfyUI)
 
-게임 화면의 📷 버튼과 성장 직후 배너에서 기념 사진을 만듭니다.
+**앨범의 [사진 찍기]** 와 성장 직후 배너에서 기념 사진을 만듭니다.
 생성은 팀원 노트북에서 도는 **ComfyUI**가 하고, 앱은 HTTP로 주문만 넣습니다.
 
 지금은 로컬 서버에만 붙어서 **API 키가 필요 없습니다.** 위의 A/B 논쟁은
 클라우드로 옮길 때 다시 꺼내면 됩니다.
+
+한 장에 **3~10분**이 걸립니다(기계에 따라 다릅니다). GPU가 하나라 요청은 줄을 서고,
+그동안 다른 화면에서 계속 놀 수 있습니다 — 기다리는 일은 화면이 아니라
+`src/lib/photo-job.tsx`가 하고, 다 되면 게임 화면 앨범 버튼에 빨간 점이 붙습니다.
 
 ### 준비
 
@@ -355,18 +414,42 @@ python main.py --listen 0.0.0.0 --enable-cors-header "*"
 
 ### 어디를 고치면 되나
 
-| 하고 싶은 것 | 고칠 곳 |
-| --- | --- |
-| 워크플로 교체 | `src/lib/krea2_identity_edit.json` (ComfyUI에서 **Export (API)**) |
-| 바뀐 워크플로의 노드 번호 | `src/lib/comfy.ts`의 `NODES` |
-| 프롬프트 문장 | `src/lib/photo-prompt.ts` |
-| 화면 (로딩·결과·에러) | `src/app/photo-gen.tsx` |
+| 하고 싶은 것              | 고칠 곳                                                           |
+| ------------------------- | ----------------------------------------------------------------- |
+| 워크플로 교체             | `src/lib/krea2_identity_edit.json` (ComfyUI에서 **Export (API)**) |
+| 바뀐 워크플로의 노드 번호 | `src/lib/comfy.ts`의 `NODES`                                      |
+| **견종·단계별 묘사**      | `20-breed-prompts/*.md` → `npm run prompts:build`                 |
+| 원본 사진을 지키는 규칙   | `src/lib/photo-prompt.ts`의 `IDENTITY_RULE`                       |
+| 화면 (로딩·결과·에러)     | `src/app/photo-gen.tsx`                                           |
 
 앱이 워크플로에서 덮어쓰는 값은 **세 개뿐**입니다 — 사용자 사진(`LoadImage`),
 프롬프트(`Krea2EditGroundedEncode`), seed(`KSampler`). 나머지는 JSON 그대로 갑니다.
 
-> ⚠️ 결과 이미지 URL은 **ComfyUI 서버가 켜져 있는 동안만** 유효합니다.
-> 서버를 끄면 이미 만든 사진도 안 보입니다. 오래 남기려면 따로 받아 두어야 합니다.
+### 프롬프트는 문서가 원본입니다
+
+견종별 묘사는 코드가 아니라 **`20-breed-prompts/*.md`** 에 사람이 읽고 고치는 형태로
+있습니다. `npm run prompts:build` 가 그걸 파싱해 `src/constants/breed-prompt.ts` 로
+찍어냅니다. **생성물이라 직접 고치면 다음 빌드에 날아갑니다.**
+
+실제로 나갈 문장은 이렇게 확인합니다:
+
+```bash
+npm run keepsake:prompt -- shiba teen     # 품종 · 단계
+npm run keepsake:prompt                   # 인자 없으면 길이 표만
+```
+
+> 💡 **배경은 생성하지 않습니다.** 문서에는 장소 묘사("창가 나무 바닥")가 있지만 빌드가
+> 걷어냅니다 — 우리는 인물과 배경을 올린 사진에서 그대로 가져오기 때문에, 두 곳에서
+> 배경을 정하면 서로 싸웁니다.
+
+> ⚠️ 결과 이미지 URL은 **ComfyUI 서버가 켜져 있는 동안만** 유효합니다. 그래서 앱은 URL을
+> 들고 있지 않고 **받아서 보관합니다**(웹은 IndexedDB, 폰은 파일). 서버를 꺼도 앨범에는
+> 남습니다.
+
+> ⚠️ **폰에서만 걸리는 것**: 안드로이드는 앱의 평문 `http://` 통신을 기본 차단합니다.
+> ComfyUI 주소는 https가 될 수 없어서 `app.json` 에 `usesCleartextTraffic` 을 켜 뒀습니다.
+> 브라우저와 Expo Go는 이 정책 대상이 아니라서, **설치한 APK에서만** 조용히 실패합니다.
+> 이 설정을 지우면 그때 화면에 남는 건 "연결하지 못했어요" 한 줄뿐입니다.
 
 ---
 
@@ -409,13 +492,53 @@ EXPO_PUBLIC_MEMORY_URL=http://192.168.0.2:4000
 
 ### 어디를 고치면 되나
 
-| 하고 싶은 것 | 고칠 곳 |
-| --- | --- |
-| 저장/조회 API | `server/src/index.ts` |
-| DB 스키마 | `server/src/db.ts` |
-| 요약 프롬프트 | `server/src/summarize.ts`의 `foldIntoSummary()` |
-| 앱이 서버를 부르는 부분 | `src/lib/persona-chat/memory-client.ts` |
-| 기기 익명 ID | `src/lib/storage.ts`의 `ensureDeviceId()` |
+| 하고 싶은 것            | 고칠 곳                                         |
+| ----------------------- | ----------------------------------------------- |
+| 저장/조회 API           | `server/src/index.ts`                           |
+| DB 스키마               | `server/src/db.ts`                              |
+| 요약 프롬프트           | `server/src/summarize.ts`의 `foldIntoSummary()` |
+| 앱이 서버를 부르는 부분 | `src/lib/persona-chat/memory-client.ts`         |
+| 기기 익명 ID            | `src/lib/storage.ts`의 `ensureDeviceId()`       |
+
+---
+
+## 배포 (APK 만들기)
+
+설치해서 쓰는 안드로이드 앱을 **EAS 클라우드 빌드**로 만듭니다. 로컬에 안드로이드 SDK를
+깔 필요가 없습니다.
+
+```bash
+npx eas-cli login                                        # 최초 1회
+npx eas-cli build --platform android --profile preview
+```
+
+`preview` 프로필은 스토어용 `.aab` 대신 **바로 설치되는 `.apk`** 를 만듭니다
+(`eas.json` 참고). 한 번에 **20~40분** 걸리고, 끝나면 다운로드 링크가 나옵니다.
+
+### 키는 저장소가 아니라 빌드 서버에
+
+`.env` 는 커밋되지 않으므로 클라우드 빌드에는 올라가지 않습니다. **EAS에 따로 등록**해야
+그 값이 들어간 APK가 나옵니다.
+
+```bash
+npx eas-cli env:create --scope project --name EXPO_PUBLIC_VISION_API_KEY \
+  --value "..." --visibility sensitive \
+  --environment preview --environment development --type string --force
+
+npx eas-cli env:list --environment preview               # 확인
+```
+
+> ⚠️ `sensitive` 는 **대시보드와 빌드 로그에서 가려줄 뿐**, 완성된 APK에서 키를 꺼내는 것은
+> 막지 못합니다. `EXPO_PUBLIC_*` 는 번들에 문자열로 박히기 때문입니다.
+
+### 알아둘 것
+
+- **값은 빌드할 때 박힙니다.** `.env` 나 EAS 변수를 바꿔도 **APK를 다시 굽기 전까지는
+  반영되지 않습니다.** 특히 `EXPO_PUBLIC_COMFY_URL` 은 현장에서 서버 IP가 달라지면
+  다시 구워야 하니, 발표 당일에는 시간 여유를 두세요.
+- **네이티브 모듈을 새로 넣으면** Expo Go에서 되더라도 APK는 다시 구워야 합니다.
+- **Expo Go와 APK는 저장 공간이 다릅니다.** Expo Go에서 만든 앨범 사진은 APK에 따라오지
+  않습니다. 시연용 사진이 필요하면 APK 안에서 새로 만드세요.
 
 ---
 
