@@ -79,6 +79,15 @@ export default function GameScreen() {
    */
   const [face, setFace] = useState<string>('');
 
+  /** 위 관찰을 말풍선으로 펼쳐서 볼지. 기본은 접힘(한 줄)입니다. */
+  const [faceOpen, setFaceOpen] = useState(false);
+
+  /** 한 줄에 안 들어가는가. 그럴 때만 "더보기"를 답니다. */
+  const [faceTruncated, setFaceTruncated] = useState(false);
+
+  /** 말풍선이 뜰 높이. "함께한 N일째" 줄의 아래쪽입니다. */
+  const [faceAnchorTop, setFaceAnchorTop] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     loadAnalysis().then((saved) => {
@@ -314,21 +323,91 @@ export default function GameScreen() {
 
   return (
     <Screen scroll edges={['top']}>
+      {/*
+        말풍선이 떠 있는 동안 화면 전체를 덮는 투명한 막.
+
+        말풍선 밖 아무 데나 누르면 닫히게 하는 장치입니다. 이게 없으면 닫는
+        방법이 헤더를 다시 누르는 것뿐이라, 열어놓고 다른 걸 만지려다 헛손질을
+        합니다. 막이 눌림을 먹는 것도 그래서 일부러입니다 — 닫는 그 한 번은
+        아래 버튼으로 넘어가지 않습니다.
+
+        말풍선은 헤더(zIndex 2) 안에 있어서 이 막(zIndex 1) 위에 그대로 뜹니다.
+        Screen 의 안쪽 여백만큼 음수로 빼서 화면 가장자리까지 덮습니다.
+      */}
+      {face && faceOpen ? (
+        <Pressable
+          style={styles.faceBackdrop}
+          onPress={() => setFaceOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="닮은 이유 닫기"
+        />
+      ) : null}
       <View style={styles.header}>
-        <View style={styles.headerText}>
+        {/*
+          품종 · 날짜 · 판정 근거를 **한 덩어리로** 누릅니다.
+
+          처음에는 화살표만, 다음에는 날짜 줄만 버튼이었는데 폰에서 자꾸
+          빗나갔습니다. 글자 한 줄은 손가락보다 얇습니다. 이 세 줄은 어차피
+          "이 아이가 누구인가" 하나를 설명하는 묶음이라, 통째로 누르게 했습니다.
+        */}
+        <Pressable
+          style={styles.headerText}
+          onPress={face ? () => setFaceOpen((open) => !open) : undefined}
+          disabled={!face}
+          accessibilityRole={face ? 'button' : undefined}
+          accessibilityState={face ? { expanded: faceOpen } : undefined}
+          accessibilityLabel={
+            face ? (faceOpen ? '닮은 이유 접기' : '닮은 이유 펼치기') : undefined
+          }>
           <Text style={[styles.breed, { color: c.text }]}>
             {nickname}
             {objectParticle(nickname)} 닮은{' '}
             <Text style={{ color: c.primary }}>{BREEDS[pet.breed].label}</Text>
           </Text>
-          <Text style={[styles.days, { color: c.textSecondary }]}>함께한 {days + 1}일째</Text>
-          {/* 판정이 이 품종을 고른 이유. 없으면(예전 데이터) 줄 자체가 안 나옵니다. */}
+          {/*
+            말풍선이 뜰 자리를 이 줄에서 재둡니다 — 헤더 높이는 오른쪽 버튼들이
+            정해서, 그걸 기준으로 잡으면 말풍선이 한참 아래에 뜹니다.
+          */}
+          <View
+            style={styles.daysRow}
+            onLayout={(e) =>
+              setFaceAnchorTop(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
+            }>
+            <Text style={[styles.days, { color: c.textSecondary }]}>함께한 {days + 1}일째</Text>
+            {face ? (
+              <Text style={[styles.days, { color: c.textSecondary }]}>{faceOpen ? '▲' : '▼'}</Text>
+            ) : null}
+          </View>
           {face ? (
-            <Text style={[styles.face, { color: c.textSecondary }]} numberOfLines={2}>
-              {face}
-            </Text>
+            <View style={styles.faceRow}>
+              <Text
+                // 말풍선이 떠 있는 동안에는 감춥니다. 안 그러면 잘린 첫 문장과
+                // 말풍선 속 같은 문장이 나란히 보여서 두 번 쓴 것처럼 읽힙니다.
+                // 지우지 않고 투명하게만 두는 건 자리를 남겨 화면이 안 튀게 하려는 것입니다.
+                style={[styles.face, { color: c.textSecondary }, faceOpen && styles.faceHidden]}
+                numberOfLines={1}>
+                {face}
+              </Text>
+              {faceTruncated && !faceOpen ? (
+                <Text style={[styles.faceMore, { color: c.primary }]}>… 더보기</Text>
+              ) : null}
+
+              {/*
+                잘리는지 재기 위한 보이지 않는 복사본.
+
+                RN 은 "이 글자가 잘렸는가"를 알려주지 않습니다. numberOfLines 를
+                건 Text 는 잘린 뒤의 줄만 세어주기 때문입니다. 그래서 제한을
+                걸지 않은 같은 글자를 한 벌 더 그려서 줄 수를 세고, 두 줄 이상이면
+                "한 줄에 안 들어간다"고 봅니다. 눈에는 안 보이고 자리도 안 먹습니다.
+              */}
+              <Text
+                style={styles.faceProbe}
+                onTextLayout={(e) => setFaceTruncated(e.nativeEvent.lines.length > 1)}>
+                {face}
+              </Text>
+            </View>
           ) : null}
-        </View>
+        </Pressable>
         <View style={styles.headerActions}>
           <Pressable onPress={() => void handleRelease()} hitSlop={8}>
             <Text style={[styles.reset, { color: c.textSecondary }]}>다시 키우기</Text>
@@ -372,6 +451,28 @@ export default function GameScreen() {
             <Text style={[styles.photoLabel, { color: c.textSecondary }]}>앨범</Text>
           </Pressable>
         </View>
+
+        {/*
+          펼친 판정 근거. 헤더 **위에 떠서** 보여줍니다.
+
+          자리를 차지하며 늘어나면 아래 캐릭터가 통째로 밀려 내려가서, 펼칠
+          때마다 화면이 출렁입니다. 말풍선으로 띄우면 뒤 배치는 그대로입니다.
+
+          "함께한 N일째" 줄 바로 아래(faceAnchorTop)에 달고, 폭은 헤더 전체를
+          씁니다. 오른쪽 사진/앨범 버튼을 덮지만, 잠깐 뜨는 것이라 괜찮습니다.
+        */}
+        {face && faceOpen ? (
+          <Pressable
+            onPress={() => setFaceOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="닮은 이유 닫기"
+            style={[
+              styles.facePopover,
+              { top: faceAnchorTop, backgroundColor: c.surface, borderColor: c.border },
+            ]}>
+            <Text style={[styles.facePopoverText, { color: c.text }]}>{face}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.stageWrap}>
@@ -796,6 +897,36 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: Spacing.md,
+    // 말풍선이 헤더 밖으로 나가 아래 내용을 덮어야 해서, 헤더가 위에 옵니다.
+    // (안드로이드는 zIndex 만으로는 안 되고 elevation 이 있어야 합니다)
+    zIndex: 2,
+  },
+  faceBackdrop: {
+    position: 'absolute',
+    // Screen 이 준 안쪽 여백(Spacing.lg) 밖까지 덮습니다.
+    top: -Spacing.lg,
+    left: -Spacing.lg,
+    right: -Spacing.lg,
+    bottom: -Spacing.lg,
+    zIndex: 1,
+  },
+  facePopover: {
+    position: 'absolute',
+    // top 은 "함께한 N일째" 줄 아래로 화면에서 정합니다. 살짝 띄워서 붙어
+    // 보이지 않게 합니다.
+    marginTop: Spacing.xs,
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.12)',
+    elevation: 4,
+  },
+  facePopoverText: {
+    fontSize: FontSize.caption,
+    lineHeight: 19,
   },
   headerText: {
     flex: 1,
@@ -804,14 +935,43 @@ const styles = StyleSheet.create({
     fontSize: FontSize.label,
     fontWeight: '800',
   },
+  daysRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
   days: {
     fontSize: FontSize.caption,
     marginTop: 2,
   },
+  faceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   face: {
     fontSize: FontSize.caption,
     lineHeight: 17,
-    marginTop: 4,
+    // 줄어들 수 있어야 "더보기"에게 자리를 내주고 잘립니다.
+    flexShrink: 1,
+  },
+  faceHidden: {
+    opacity: 0,
+  },
+  faceMore: {
+    fontSize: FontSize.caption,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  faceProbe: {
+    // 줄 수만 세는 용도라 보이지도, 자리를 차지하지도, 눌리지도 않습니다.
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    opacity: 0,
+    pointerEvents: 'none',
+    fontSize: FontSize.caption,
+    lineHeight: 17,
   },
   swipeHint: {
     fontSize: FontSize.caption,
