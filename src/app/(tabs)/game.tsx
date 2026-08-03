@@ -75,8 +75,18 @@ export default function GameScreen() {
   const c = useTheme();
   const router = useRouter();
   const { user } = useAuth();
-  const { pet, isLoading, care, pat, release, skipStage, rewind, forceStats, forceDepart } =
-    usePet();
+  const {
+    pet,
+    isLoading,
+    care,
+    pat,
+    release,
+    skipStage,
+    rewind,
+    forceStats,
+    forceDepart,
+    forceWish,
+  } = usePet();
   const photoJob = usePhotoJob();
 
   /**
@@ -199,6 +209,10 @@ export default function GameScreen() {
    * 연달아 누르면 반응이 점점 커집니다(patStreakReaction).
    */
   async function handlePat() {
+    // 연타 간격을 재려면 지금 시각이 필요합니다. 렌더가 아니라 손가락이 닿았을
+    // 때 부르는 함수라 매번 값이 달라도 됩니다 — 컴파일러는 그 구분을 못 해서
+    // 렌더 중 호출로 봅니다.
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     patStreak.current = now - lastPatAt.current < PAT_STREAK_WINDOW_MS ? patStreak.current + 1 : 1;
     lastPatAt.current = now;
@@ -324,7 +338,6 @@ export default function GameScreen() {
 
   const wish = careOpen ? wishOf(pet) : null;
   const wishAction = wish ? CARE_ACTIONS.find((a) => a.id === wish.actionId) : null;
-  const activityAction = activity ? CARE_ACTIONS.find((a) => a.id === activity) : null;
 
   // 조사는 단어에 따라 갈립니다("멍멍을" / "루비를") — lib/korean.ts
   const nickname = user?.nickname ?? '나';
@@ -572,17 +585,6 @@ export default function GameScreen() {
         </View>
       ) : null}
 
-      {activityAction ? (
-        <ActivityBar
-          // 액션이 바뀌면 새로 시작해야 하므로 key를 붙입니다.
-          key={activityAction.id}
-          label={activityAction.activityLabel}
-          emoji={activityAction.emoji}
-          durationMs={activityAction.activityMs}
-          onDone={() => void finishCare(activityAction.id)}
-        />
-      ) : null}
-
       {wish && wishAction ? (
         <View style={[styles.wish, { backgroundColor: c.surface, borderColor: c.primary }]}>
           <Text style={styles.wishEmoji}>{wishAction.emoji}</Text>
@@ -594,6 +596,19 @@ export default function GameScreen() {
           </View>
         </View>
       ) : null}
+
+      {/*
+        여기부터 아래(성장 바 · 스탯 · 돌봄 버튼)는 **화면 바닥에 붙여 둡니다.**
+
+        위쪽에는 상황에 따라 나타났다 사라지는 카드가 넷 있습니다 — 성장 축하,
+        떠나기 경고, 돌봄 진행 바, 바라는 것. 예전에는 그게 뜰 때마다 아래
+        UI 가 통째로 밀려서, 밥 주려고 누른 버튼이 손가락 밑에서 움직였습니다.
+
+        이 빈칸이 남는 세로 공간을 다 먹고 있다가 카드가 뜨면 그만큼 줄어듭니다.
+        아래는 제자리에 그대로 있습니다. 화면보다 내용이 길어지면 빈칸이 0이
+        되고 평소처럼 스크롤됩니다.
+      */}
+      <View style={styles.bottomSpacer} />
 
       {progress ? (
         <View style={styles.growth}>
@@ -664,7 +679,19 @@ export default function GameScreen() {
                   <Text style={styles.careEmoji}>{action.emoji}</Text>
                   <Text style={[styles.careLabel, { color: c.text }]}>{action.label}</Text>
                   {running ? (
-                    <Text style={[styles.careWish, { color: c.primary }]}>진행 중</Text>
+                    // 진행 바가 **버튼 안**에 들어갑니다. 예전에는 화면 가운데
+                    // 별도 카드로 떠서, 어느 버튼을 눌러 시작한 건지 눈이 한 번
+                    // 옮겨가야 했고 그때마다 아래 UI 가 통째로 밀렸습니다.
+                    // 사이드이펙트 안내가 있던 줄에 그대로 앉힙니다.
+                    <ActivityBar
+                      compact
+                      // 액션이 바뀌면 새로 시작해야 하므로 key를 붙입니다.
+                      key={action.id}
+                      label={action.activityLabel}
+                      emoji={action.emoji}
+                      durationMs={action.activityMs}
+                      onDone={() => void finishCare(action.id)}
+                    />
                   ) : wanted ? (
                     <Text style={[styles.careWish, { color: c.primary }]}>바라는 중</Text>
                   ) : (
@@ -748,6 +775,22 @@ export default function GameScreen() {
                 <DevButton label="스탯 0 (방치)" onPress={() => void forceStats(0)} />
                 <DevButton label="스탯 30" onPress={() => void forceStats(30)} />
                 <DevButton label="스탯 100" onPress={() => void forceStats(100)} />
+              </View>
+
+              {/*
+                소원(바라는 것)을 지금 띄웁니다. 그냥 두면 1분 주기에 60%
+                확률이라 시연 중에 안 나올 수 있습니다. 눌러서 들어주면
+                보너스 경험치가 붙는 것까지 그대로 확인됩니다.
+              */}
+              <View style={styles.devRow}>
+                {CARE_ACTIONS.map((action) => (
+                  <DevButton
+                    key={action.id}
+                    label={`${action.emoji} 바라기`}
+                    onPress={() => void forceWish(action.id)}
+                    disabled={!careOpen}
+                  />
+                ))}
               </View>
 
               <View style={styles.devRow}>
@@ -1118,6 +1161,12 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     opacity: 0.7,
   },
+  bottomSpacer: {
+    // 남는 세로 공간을 전부 먹습니다. 위쪽 카드가 뜨면 그만큼 줄어듭니다.
+    flex: 1,
+    // 카드가 많이 떠서 빈칸이 0이 되어도 성장 바가 위 내용에 딱 붙지는 않게.
+    minHeight: Spacing.md,
+  },
   growth: {
     marginTop: Spacing.lg,
     gap: Spacing.xs,
@@ -1282,8 +1331,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dev: {
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.md,
+    // 시연 도구는 접혀 있을 때 한 줄짜리라, 위아래로 넉넉히 띄우면 그 여백이
+    // 도구보다 커 보입니다. 게임 화면에 얹힌 군더더기라 조용히 붙여 둡니다.
+    marginTop: Spacing.xs,
+    marginBottom: 0,
     borderWidth: 1,
     borderStyle: 'dashed',
     borderRadius: Radius.md,
