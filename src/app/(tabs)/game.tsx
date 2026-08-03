@@ -46,7 +46,8 @@ import {
 import { objectParticle } from '@/lib/korean';
 import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob } from '@/lib/photo-job';
-import { loadAnalysis } from '@/lib/storage';
+import { resetConversation } from '@/lib/persona-chat/memory-client';
+import { clearPetName, ensureDeviceId, loadAnalysis } from '@/lib/storage';
 
 /** 이 값보다 낮은 스탯이 하나라도 있으면 캐릭터가 시무룩해집니다. */
 const SAD_BELOW = 25;
@@ -216,12 +217,28 @@ export default function GameScreen() {
   }
 
   /**
+   * 캐릭터를 지울 때 채팅 쪽 흔적도 같이 지웁니다.
+   *
+   * `release()`(lib/pet.tsx)는 게임 캐릭터 상태만 지웁니다 — 채팅은 별개
+   * 도메인이라 그쪽은 모릅니다(파일 상단 주석 참고). 여기서 지우지 않으면
+   * 새로 키운(다른 품종·다른 성격의) 캐릭터가 이전 캐릭터의 이름과 대화
+   * 기억(서버 요약)을 그대로 물려받습니다 — 다른 애완견인데 전 애를 기억하는
+   * 셈이라 이상합니다.
+   */
+  async function resetChatForNewPet() {
+    await clearPetName();
+    const deviceId = await ensureDeviceId();
+    await resetConversation(deviceId);
+  }
+
+  /**
    * 떠난 뒤 처음부터 다시 시작합니다.
    * 캐릭터를 지우고 사진 업로드 화면으로 보냅니다(확인 창은 띄우지 않습니다 —
    * 이미 게임이 끝난 상태라 되돌릴 것이 없습니다).
    */
   async function handleStartOver() {
     await release();
+    await resetChatForNewPet();
     router.replace('/photo');
   }
 
@@ -235,6 +252,7 @@ export default function GameScreen() {
     if (!ok) return;
 
     await release();
+    await resetChatForNewPet();
     router.replace('/photo');
   }
 

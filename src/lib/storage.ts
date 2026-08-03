@@ -84,6 +84,11 @@ export async function savePetName(name: string): Promise<void> {
   await AsyncStorage.setItem(Keys.petName, name);
 }
 
+/** "다시 키우기"로 캐릭터를 지울 때 같이 부릅니다 — 새 캐릭터는 새 이름을 물어봐야 합니다. */
+export async function clearPetName(): Promise<void> {
+  await AsyncStorage.removeItem(Keys.petName);
+}
+
 /**
  * 채팅 대화를 서버에 저장할 때 "누구 대화인지" 구분하는 익명 ID.
  *
