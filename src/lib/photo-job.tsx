@@ -208,6 +208,12 @@ export function PhotoJobProvider({ children }: { children: ReactNode }) {
         await savePhotoJob(job);
         void follow(job);
       } catch (e) {
+        // 원본은 화면에 뿌리지 않되 버리지도 않습니다. 화면에 남는 건
+        // "연결하지 못했어요" 한 줄뿐이라, 이게 없으면 무엇이 어디서 터졌는지
+        // 알 방법이 없습니다 — 폰에서만 나는 문제를 쫓느라 실제로 헤맸습니다.
+        // (대화 화면도 같은 이유로 console.warn 을 남깁니다)
+        console.warn('[photo-job] 시작 실패:', e);
+
         setState({
           stage,
           status: 'error',

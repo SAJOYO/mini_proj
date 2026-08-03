@@ -238,11 +238,17 @@ export default function AlbumScreen() {
         */}
         {pet ? (
           <Button
+            // 만드는 중에도 **눌립니다.** 사진 찍기 화면이 진행 상황을 보여주는
+            // 유일한 곳이라, 여기서 막으면 얼마나 남았는지 볼 방법이 없어집니다.
+            // (전에 disabled 를 걸었다가 실제로 갇혔습니다)
+            //
+            // 중복으로 시작될 걱정은 없습니다 — 진행 중이면 저쪽 화면의 실행
+            // 버튼이 잠깁니다. 막는 자리는 한 곳이면 충분합니다.
             label={photoBusy ? '사진 만드는 중...' : '사진 찍기'}
+            variant={photoBusy ? 'secondary' : undefined}
             onPress={() =>
               router.push({ pathname: '/photo-gen', params: { stage: stageOf(pet).id } })
             }
-            disabled={photoBusy}
           />
         ) : null}
         <Button label="돌아가기" variant="secondary" onPress={goBack} />
