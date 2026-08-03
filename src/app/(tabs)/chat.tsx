@@ -295,6 +295,19 @@ export default function ChatScreen() {
             style={[styles.input, { color: c.text }]}
             returnKeyType="send"
             onSubmitEditing={send}
+            onKeyPress={(e) => {
+              // multiline 입력창은 웹에서 Enter가 onSubmitEditing을 안 띄우고
+              // 줄바꿈만 넣습니다. Shift+Enter는 줄바꿈으로 남기고 Enter만 전송으로 뺍니다.
+              if (Platform.OS !== 'web') return;
+              const { key, shiftKey } = e.nativeEvent as unknown as {
+                key: string;
+                shiftKey?: boolean;
+              };
+              if (key === 'Enter' && !shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
             editable={!sending}
             multiline
           />
