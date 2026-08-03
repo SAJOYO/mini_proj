@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { addPhoto, fetchBlob } from '@/lib/album';
+import { addPhotoFromUrl } from '@/lib/album';
 import {
   cancel as cancelOnServer,
   checkResult,
@@ -150,12 +150,14 @@ export function PhotoJobProvider({ children }: { children: ReactNode }) {
 
         // 서버 URL을 그대로 두지 않고 받아 옵니다. 그래야 생성 서버가 꺼져도,
         // 와이파이를 벗어나도 사진이 남습니다.
-        const blob = await fetchBlob(result.url);
+        // (웹이면 IndexedDB, 폰이면 파일로 — 갈리는 건 lib/album.ts 안에서만)
+        const entry = await addPhotoFromUrl(result.url, {
+          breed: job.breed,
+          stage,
+          caption: job.caption,
+        });
         if (cancelled) return;
 
-        const entry = blob
-          ? await addPhoto(blob, { breed: job.breed, stage, caption: job.caption })
-          : null;
         await clearPhotoJob();
 
         if (!cancelled) {

@@ -9,7 +9,14 @@ import { Screen } from '@/components/screen';
 import { resolveBreed, resolveStage } from '@/constants/pet';
 import { FontSize, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { canDownload, downloadBlob, latestOfStage, loadPhoto } from '@/lib/album';
+import {
+  canDownload,
+  downloadBlob,
+  latestOfStage,
+  loadPhoto,
+  photoUri as albumPhotoUri,
+  revokePhotoUri,
+} from '@/lib/album';
 import { resolvePhoto } from '@/lib/image';
 import { usePet } from '@/lib/pet';
 import { isRunning, usePhotoJob, type JobStatus } from '@/lib/photo-job';
@@ -94,7 +101,7 @@ export default function PhotoGenScreen() {
   const objectUrl = useRef<string | null>(null);
   useEffect(() => {
     return () => {
-      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
+      if (objectUrl.current) revokePhotoUri(objectUrl.current);
     };
   }, []);
 
@@ -110,15 +117,22 @@ export default function PhotoGenScreen() {
   useEffect(() => {
     let alive = true;
 
-    latestOfStage(stage)
-      .then((entry) => (entry ? loadPhoto(entry.id) : null))
-      .then((blob) => {
-        if (!alive || !blob) return;
-        if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-        objectUrl.current = URL.createObjectURL(blob);
-        setLatest(blob);
-        setResult(objectUrl.current);
-      });
+    latestOfStage(stage).then(async (entry) => {
+      if (!alive || !entry) return;
+
+      const uri = await albumPhotoUri(entry.id);
+      if (!alive || !uri) return;
+
+      if (objectUrl.current) revokePhotoUri(objectUrl.current);
+      objectUrl.current = uri;
+      setResult(uri);
+
+      // 바이트는 내려받기에만 씁니다. 그 버튼이 없는 환경(폰)에서는 읽지
+      // 않습니다 — 쓰지도 않을 사진을 통째로 메모리에 올릴 이유가 없습니다.
+      if (!canDownload()) return;
+      const blob = await loadPhoto(entry.id);
+      if (alive && blob) setLatest(blob);
+    });
 
     return () => {
       alive = false;
