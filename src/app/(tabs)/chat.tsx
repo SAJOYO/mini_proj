@@ -22,6 +22,7 @@ import { anchorMix, dominantBreed, resolveMix, synthesize, DEFAULT_MIX } from '@
 import { ChatCompletionsPersonaClient, type ChatTurn } from '@/lib/persona-chat/chat-client';
 import { appendTurns, fetchConversation } from '@/lib/persona-chat/memory-client';
 import { describeFailure, NO_CHAT_KEY } from '@/lib/failure-message';
+import { pickParticle } from '@/lib/korean';
 import { ensureDeviceId, loadAnalysis, loadPetName, savePetName } from '@/lib/storage';
 
 /**
@@ -63,6 +64,21 @@ const NAMING_PROMPT = '안녕! 아직 이름이 없어 ㅠㅠ\n내 이름을 뭐
 const CASUAL_OPENERS = /^(안녕|hi|hello|반가워|헐|응|어|오|뭐해|배고파|심심해)/i;
 
 /**
+ * "이름" + 바꾸자는 낌새가 같이 있는 문장만 골라냅니다.
+ *
+ * 이미 이름이 정해진 뒤에는(재작명) 매 메시지마다 "이번에도 이름 짓는
+ * 말인가"를 LLM에 물어보면 낭비입니다 — 평소 대화 내내 이름 얘기는
+ * 거의 안 나오니까요. 그래서 값싼 키워드 검사로 먼저 거르고, 걸린
+ * 경우에만 `extractPetName`을 호출합니다.
+ */
+const RENAME_KEYWORDS = /(바꿔|바꿀래|바꾸|다시|새로|지어|지을래|지어줄게|정할래|이제부터)/;
+function looksLikeRename(text: string): boolean {
+  // "이제부터 이름은 OO야"처럼 힌트 단어가 "이름"보다 앞에 오는 경우가 많아서,
+  // 순서를 따지지 않고 둘 다 있는지만 봅니다.
+  return /이름/.test(text) && RENAME_KEYWORDS.test(text);
+}
+
+/**
  * LLM 없이 이름 짓는 문장인지 판단합니다(CHAT 미설정 시 폴백).
  *
  * 따옴표 안쪽, "이름은 OO야/이야/입니다" 류의 명시적인 패턴, 또는 흔한
@@ -88,12 +104,17 @@ function fallbackName(raw: string): string | null {
 }
 
 /**
- * 이 문장이 반려동물 이름을 지어주는 말이면 이름만 뽑아냅니다. 아니면 null.
+ * 이 문장이 반려동물 이름을 짓거나 다시 짓는 말이면 새 이름만 뽑아냅니다. 아니면 null.
  *
- * "이름 아직 없어" 인사 다음 메시지를 무조건 이름으로 삼으면, 사용자가
- * 이름 대신 다른 말(인사·잡담)을 했을 때도 그걸 이름으로 저장해버립니다.
- * 그래서 매 메시지마다(이름이 정해지기 전까지) 이 함수로 먼저 "이름을
- * 지어주는 문장인가"를 판단하고, 아니면 평소처럼 대화로 흘려보냅니다.
+ * 이름이 없을 때도, 이미 있는데 다시 지어주려 할 때도 같은 함수를 씁니다
+ * — 둘 다 "지금 이 문장이 이름 이야기인가"를 판단하는 문제라서요.
+ * `currentName`을 같이 넘기면 프롬프트가 "이미 이름이 있다"는 걸 알고
+ * 판단하므로, 그냥 현재 이름을 반복해서 말하는 것과 진짜 재작명을 구분합니다.
+ *
+ * 인사 다음 메시지를(또는 평소 아무 메시지나) 무조건 이름으로 삼으면,
+ * 사용자가 이름 대신 다른 말(인사·잡담)을 했을 때도 그걸 이름으로
+ * 저장해버립니다. 그래서 호출하는 쪽(send())이 먼저 이 함수로 "이름
+ * 이야기인가"를 판단하고, 아니면 평소처럼 대화로 흘려보냅니다.
  *
  * "안녕 너의 이름은 오늘부터 "먕먕이"야" 처럼 문장째로 답하는 경우가 흔해서,
  * 그 문장을 통째로 저장하면 헤더에 문장이 그대로 뜹니다. 캐릭터 연기용
@@ -102,28 +123,34 @@ function fallbackName(raw: string): string | null {
  * 직접 써서 이름만 뽑도록 시킵니다. 키가 없거나 호출이 실패하면
  * `fallbackName`(따옴표/명시적 패턴 추출)으로 내려갑니다.
  */
-async function extractPetName(raw: string): Promise<string | null> {
+async function extractPetName(raw: string, currentName: string | null): Promise<string | null> {
   if (!CHAT) return fallbackName(raw);
 
   try {
     const client = new ChatCompletionsClient({ apiKey: CHAT.apiKey, baseUrl: CHAT.baseUrl });
+    const context = currentName
+      ? `반려동물의 현재 이름은 "${currentName}"이다.`
+      : '반려동물은 아직 이름이 없다.';
     const text = await client.complete({
       model: CHAT.model,
       messages: [
         {
           role: 'user',
           content: [
-            '반려동물 챗봇 앱이다. 사용자는 아직 반려동물 이름을 안 지어줬고,',
-            '방금 아래 문장을 보냈다.',
+            '반려동물 챗봇 앱이다.',
+            context,
+            '사용자가 방금 아래 문장을 보냈다.',
             '',
             `문장: ${raw}`,
             '',
-            '이 문장이 인사·질문·일상 잡담(예: "안녕", "오늘 뭐해", "밥 먹었어?")이면',
-            '다른 설명 없이 정확히 NONE 이라고만 출력해라.',
+            '이 문장이 인사·질문·일상 잡담이거나(예: "안녕", "오늘 뭐해", "밥 먹었어?")',
+            '현재 이름을 그냥 다시 말하는 것뿐이면, 다른 설명 없이 정확히',
+            'NONE 이라고만 출력해라.',
             '',
-            '그게 아니라 이름 하나만 말했거나(예: "뭉치") "이름은 OO야" 처럼',
-            '이름을 알려주는 문장이면, 그 이름만(조사·문장부호 없이) 출력해라.',
-            '짧은 단어 하나뿐이고 흔한 인사말이 아니면 이름으로 간주해라.',
+            '그게 아니라 새 이름을 하나만 말했거나(예: "뭉치") "이름은 OO야" /',
+            '"이름 OO로 바꿔줘"처럼 새 이름을 알려주거나 바꿔달라는 문장이면,',
+            '그 새 이름만(조사·문장부호 없이) 출력해라. 짧은 단어 하나뿐이고',
+            '흔한 인사말이 아니면 이름으로 간주해라.',
           ].join('\n'),
         },
       ],
@@ -259,13 +286,18 @@ export default function ChatScreen() {
     setDraft('');
     setMessages((prev) => [...prev, { id: `u-${prev.length}`, role: 'user', content: text }]);
 
-    // 아직 이름이 없으면, 이번 메시지가 이름을 지어주는 말인지 먼저 확인합니다.
-    // 아니면(인사·잡담이면) 이름을 넘겨짚지 않고 아래로 흘려보내 평소처럼
-    // 대화합니다 — 그동안 헤더/캐릭터 이름은 계속 내 닉네임(displayName)입니다.
-    if (!petName) {
-      const name = await extractPetName(text);
-      if (name) {
-        const confirmation = `${name}구나! 마음에 들어 헤헤`;
+    // 아직 이름이 없으면 매번, 이미 있으면 "이름 얘기인 것 같을 때만"
+    // (looksLikeRename) 이번 메시지가 이름을 짓거나 다시 짓는 말인지
+    // 확인합니다. 아니면(인사·잡담이면) 이름을 넘겨짚지 않고 아래로
+    // 흘려보내 평소처럼 대화합니다.
+    if (!petName || looksLikeRename(text)) {
+      const name = await extractPetName(text, petName);
+      if (name && name !== petName) {
+        // 재작명일 때와 처음 지을 때는 확인 멘트를 다르게 합니다 — "구나!"는
+        // 처음 듣고 반가워하는 말투라 이미 이름이 있는데 또 쓰면 어색합니다.
+        const confirmation = petName
+          ? `이제부터 ${name}${pickParticle(name, '이라고', '라고')} 불러줄게! 헤헤`
+          : `${name}구나! 마음에 들어 헤헤`;
 
         setMessages((prev) => [
           ...prev,
@@ -274,8 +306,8 @@ export default function ChatScreen() {
         setPetName(name);
         void savePetName(name);
 
-        // 서버에도 남겨둡니다. `name`(방금 막 지어진 이름)을 정답으로 같이
-        // 보내서, 요약이 이 대화에서 이름을 다른 걸로 잘못 굳히지 않게 합니다.
+        // 서버에도 남겨둡니다. `name`(방금 새로 지어진/바뀐 이름)을 정답으로
+        // 같이 보내서, 요약이 이 대화에서 이름을 다른 걸로 잘못 굳히지 않게 합니다.
         if (deviceId.current) {
           void appendTurns(
             deviceId.current,
