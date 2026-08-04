@@ -7,7 +7,6 @@
 **사진 한 장으로 나와 닮은 강아지를 찾아, 캐릭터로 키우고, 대화하고, 함께한 기념 사진까지 만드는 앱**
 
 Expo SDK 57 · React Native · TypeScript · expo-router · ComfyUI · Gemini
-웹과 안드로이드에서 같은 코드로 돕니다
 
 </div>
 
@@ -28,21 +27,20 @@ Expo SDK 57 · React Native · TypeScript · expo-router · ComfyUI · Gemini
 판정 → 캐릭터 → 성격 → 사진이 **전부 같은 견종 조합 하나에서 갈라져 나옵니다.**
 네 사람이 각자 만든 기능이 한 흐름으로 이어지는 지점입니다.
 
+## 시연 영상
+
+[![독플갱어 시연 영상](docs/screenshots/cover.png)](https://drive.google.com/file/d/1WI4S5U381Li2evgK2KVrGdU-tJPgHBmD/view)
+
+> 이미지를 누르면 시연 영상으로 이동합니다.
+
 ## 화면
 
-> 📷 스크린샷 준비 중입니다. `docs/screenshots/` 에 파일을 넣고 아래 주석만 벗기면
-> 표로 표시됩니다 ([넣는 법](docs/screenshots/README.md)).
-
-<!-- 스크린샷을 넣은 뒤 이 줄과 표 아래의 닫는 주석을 지우세요.
 |                                                |                                        |                                      |
 | ---------------------------------------------- | -------------------------------------- | ------------------------------------ |
 | ![판정 결과](docs/screenshots/result.png)      | ![다마고치](docs/screenshots/game.png) | ![대화](docs/screenshots/chat.png)   |
 | 닮은 품종 판정                                 | 캐릭터 돌보기 · 4단계 성장             | 판정 결과로 만든 성격으로 대화       |
 | ![사진 만들기](docs/screenshots/photo-gen.png) | ![앨범](docs/screenshots/album.png)    | ![엔딩](docs/screenshots/ending.png) |
 | 기념 사진 생성                                 | 단계별 앨범                            | 노년기 엔딩                          |
--->
-
-`docs/screenshots/` 에 넣을 화면: 판정 결과 · 다마고치 · 대화 · 기념 사진 생성 · 앨범 · 엔딩
 
 ## 핵심 기능
 
