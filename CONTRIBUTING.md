@@ -6,7 +6,7 @@
 ## ⚡ 3줄 요약
 
 1. 모든 작업은 **이슈 → 브랜치 → PR** 순서로. 이슈 없이 브랜치 파지 않습니다.
-2. `main`에 **직접 push 금지**. 반드시 PR로 병합합니다.
+2. `main` 과 `dev` 에 **직접 push 금지**. 반드시 PR로 병합합니다.
 3. 하루 작업을 마치면 **자기 이슈에 코멘트 한 줄**을 남깁니다.
 
 ---
@@ -49,16 +49,51 @@
 ## 3. 브랜치
 
 ```
-main                 배포 · 발표 기준. 항상 동작하는 상태 유지
-  └─ feat/MATCH_001-face-embedding
-  └─ fix/GAME_012-feed-button
-  └─ docs/DOCM_003-readme
+main                   최종 · 발표 기준. 여기로 직접 push 금지
+ └─ dev                통합 브랜치 (기본 브랜치). 모든 작업이 여기로 모입니다
+     ├─ feat/MATCH_001-face-embedding
+     ├─ fix/GAME_012-feed-button
+     └─ docs/DOCM_003-readme
 ```
+
+**작업은 항상 `dev`에서 브랜치를 따고, PR도 `dev`로 보냅니다.**
 
 - 형식: `타입/작업ID-짧은설명`
 - 타입은 `feat` · `fix` · `refactor` · `docs` 네 가지만 사용합니다.
 - 병합된 브랜치는 바로 삭제합니다.
 - 남의 브랜치에 직접 push 하지 않습니다. 필요하면 그 사람 PR에 코멘트로 요청하세요.
+
+> 💡 브랜치는 **기능 단위**로 짓고 짧게 쓰고 버리세요. 개인 이름으로 브랜치를 만들어
+> 오래 쓰면 `dev`와 점점 벌어져서 나중에 머지가 힘들어집니다.
+
+### 작업 흐름
+
+```bash
+git switch dev
+git pull                              # dev 최신 상태로
+git switch -c feat/GAME_012-feed      # 이슈 하나당 브랜치 하나
+
+# ... 작업 ...
+
+npm run check                         # 타입 + lint 통과 확인
+git add .
+git commit -m "fix: 밥 주기 버튼 연타 시 포만도 중복 증가"
+git push -u origin feat/GAME_012-feed
+```
+
+GitHub에서 **`dev`로 가는 PR**을 올립니다.
+
+### 남의 작업 가져오기
+
+내 브랜치에서 작업하는 동안 `dev`가 바뀌었으면:
+
+```bash
+git switch dev && git pull
+git switch feat/GAME_012-feed
+git merge dev                         # 충돌나면 여기서 해결
+```
+
+PR 올리기 전에 한 번 해주면 머지가 훨씬 수월합니다.
 
 ### 접은 실험은 태그로 남깁니다
 
@@ -111,7 +146,30 @@ docs: 발표용 아키텍처 다이어그램 추가
 
 ---
 
-## 5. Pull Request
+## 5. 패키지 설치
+
+Expo 관련 패키지는 `npm install` 대신 **`npx expo install`** 을 쓰세요.
+SDK 57에 맞는 버전을 알아서 골라줍니다.
+
+설치했으면 `package.json`과 `package-lock.json` **둘 다 커밋**하세요.
+
+> 💡 **새 라이브러리를 넣기 전에 팀에 공유해 주세요.** Expo Go에는 정해진 네이티브 모듈만
+> 들어있습니다. 지원하지 않는 라이브러리를 넣으면 앱이 아예 안 켜지고, 그때부터는
+> 개발 빌드(`eas build`)를 만들어서 팀 전원이 재설치해야 합니다.
+
+### package-lock.json 충돌이 났을 때
+
+손으로 고치지 마세요. 이렇게 하면 됩니다:
+
+```bash
+git checkout --theirs package-lock.json   # dev 것을 그대로 가져오고
+npm install                                # 내 package.json 기준으로 다시 생성
+git add package-lock.json
+```
+
+---
+
+## 6. Pull Request
 
 - 템플릿을 채워서 올립니다. 빈 PR은 리뷰하지 않습니다.
 - 제목은 커밋 규칙과 동일: `feat: 얼굴 임베딩 Top-5 추출 구현`
@@ -124,7 +182,7 @@ docs: 발표용 아키텍처 다이어그램 추가
 
 ---
 
-## 6. 코드 리뷰 코멘트
+## 7. 코드 리뷰 코멘트
 
 지적의 무게를 앞에 붙여주세요. 짧은 프로젝트에서는 **"이건 꼭 고쳐야 하는 건가?"를 되묻는 시간**이 가장 아깝습니다.
 
@@ -148,7 +206,7 @@ docs: 발표용 아키텍처 다이어그램 추가
 
 ---
 
-## 7. 기록
+## 8. 기록
 
 - **Decision Log** — 기술 선택이나 기획 변경이 있으면 Discussions에 남깁니다.
   형식: `무엇을 정했는가 / 후보는 무엇이었는가 / 왜 이걸 골랐는가`
