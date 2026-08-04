@@ -7,9 +7,6 @@
                                                   └→ 기념 사진 생성 → 앨범
 ```
 
-**웹과 안드로이드 앱 양쪽에서 돕니다.** 개발은 주로 웹(`npm run web`)으로 하고,
-폰은 Expo Go나 설치용 APK로 확인합니다.
-
 ---
 
 ## 📑 목차
@@ -29,16 +26,16 @@
 
 ## 시작하기
 
-### 0. Node 버전 확인 (제일 중요)
+### 0. Node 버전 확인
 
 ```bash
 node -v
 ```
 
-**v20.19.4 이상**이어야 합니다. 팀 기준은 **Node 24**예요 (`.nvmrc` 참고).
-버전이 낮으면 설치나 실행에서 이상한 에러가 납니다. [nodejs.org](https://nodejs.org)에서 받으세요.
+최소 **v20.19.4 이상**.
+작업 기준 **Node 24**.
 
-### 1. 설치 및 실행
+### 1. 설치하고 웹으로 띄우기
 
 ```bash
 git clone https://github.com/SAJOYO/mini_proj.git
@@ -47,6 +44,8 @@ npm ci
 npm run web
 ```
 
+브라우저가 열립니다. 고치고 바로 보는 작업은 이게 제일 빠릅니다.
+
 > ⚠️ **`npm install`이 아니라 `npm ci`입니다.**
 > `npm ci`는 `package-lock.json`에 적힌 버전을 그대로 설치해서 전원이 완전히 같은 환경이 됩니다.
 > `npm install`은 상황에 따라 버전을 올려버려요.
@@ -54,15 +53,7 @@ npm run web
 > ⚠️ **yarn / pnpm / bun 쓰지 마세요.** 다른 버전이 깔려서 "나는 되는데 너는 안 되는" 상황이 생깁니다.
 > 락 파일이 섞이지 않게 `.gitignore`로 막아뒀습니다.
 
-### 2. 화면 보기 — 웹으로
-
-```bash
-npm run web
-```
-
-브라우저가 열립니다. 고치고 바로 보는 작업은 이게 제일 빠릅니다.
-
-### 3. 폰에서 보기
+### 2. 폰에서 보기
 
 두 가지 길이 있습니다. **고치면서 볼 때는 Expo Go**, **완성된 앱을 확인할 때는 APK**입니다.
 
@@ -102,7 +93,7 @@ npm start
 플랫폼이 갈리는 코드는 되도록 `src/lib/` 안에 가둡니다 — 화면은 어느 쪽인지 몰라도 되게
 (`album.ts`, `image.ts`, `dialog.ts`가 그런 예입니다).
 
-### 4. ⚠️ API 키 — 시작 전에 팀에서 정하기
+### 3. ⚠️ API 키 — 시작 전에 팀에서 정하기
 
 대화 기능과 사진 생성 기능은 외부 API를 부릅니다. **여기서 흔히 사고가 납니다.**
 
@@ -265,7 +256,8 @@ const key = process.env.EXPO_PUBLIC_VISION_API_KEY;
 | 로컬 개발 서버 | `.env` 에 `EXPO_PUBLIC_DEMO_TOOLS=1` → 서버 재시작           |
 | 발표용 APK     | [`demo` 프로필로 빌드](#발표용-apk--시연-도구가-들어간-빌드) |
 
-`.env` 가 EAS 빌드에 업로드되지 않아서 APK 는 `eas.json` 이 따로 켭니다.
+**켜는 자리가 둘로 나뉜 이유** — `.env` 는 gitignore 대상이라 EAS 빌드에 업로드되지
+않습니다. 그래서 APK 는 `eas.json` 의 `demo` 프로필이 같은 변수를 따로 켭니다.
 
 ---
 
@@ -547,16 +539,9 @@ npx eas-cli build --platform android --profile preview
 npx eas-cli build --platform android --profile demo
 ```
 
-`demo` 프로필은 `preview` 와 같은 APK에 **게임 화면의 [시연 도구](#시연-도구)만 켜둔 것**입니다
-(`EXPO_PUBLIC_DEMO_TOOLS=1`). 성장 단계 건너뛰기 · 스탯 조작 · 소원 띄우기 ·
-여행 보내기를 APK에서도 쓸 수 있습니다.
-
-키는 `preview` 와 같은 EAS 환경(`environment: "preview"`)에서 가져옵니다 — 따로 등록할
-필요가 없습니다.
-
-플래그를 `eas.json` 에 적어둔 이유는 **`.env` 가 EAS 빌드에 안 올라가기 때문**입니다
-(gitignore 대상이라 업로드에서 빠집니다). 그래서 로컬은 `.env`, APK 는 `demo` 프로필로
-같은 변수를 각자 켭니다.
+`preview` 와 같은 APK에 **게임 화면의 [시연 도구](#시연-도구)만 켜둔 것**입니다
+(`EXPO_PUBLIC_DEMO_TOOLS=1`). 키도 `preview` 와 같은 EAS 환경
+(`environment: "preview"`)에서 가져오므로 따로 등록할 것이 없습니다.
 
 > ⚠️ **배포용은 `preview` 로 구우세요.** `demo` 로 구운 APK를 그대로 나눠주면 쓰는 사람이
 > 스탯과 성장을 마음대로 건드릴 수 있습니다.
@@ -575,7 +560,7 @@ npx eas-cli env:list --environment preview               # 확인
 ```
 
 > ⚠️ `sensitive` 는 **대시보드와 빌드 로그에서 가려줄 뿐**, 완성된 APK에서 키를 꺼내는 것은
-> 막지 못합니다. `EXPO_PUBLIC_*` 는 번들에 문자열로 박히기 때문입니다.
+> 막지 못합니다 ([왜 그런지](#3--api-키--시작-전에-팀에서-정하기)).
 
 ### 알아둘 것
 
@@ -591,7 +576,7 @@ npx eas-cli env:list --environment preview               # 확인
 ## 환경
 
 Expo SDK 57 · React Native 0.86 · React 19 · TypeScript · expo-router
-Node 24 (최소 20.19.4) · npm
+Node · npm ([버전은 시작하기](#0-node-버전-확인) 참고)
 
 코드 스타일은 ESLint + Prettier로 통일돼 있습니다 (`.prettierrc`, `eslint.config.js`).
 줄바꿈은 `.gitattributes`로 LF 고정 — Windows/Mac 섞여 있어도 diff가 깨지지 않습니다.
