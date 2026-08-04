@@ -1062,21 +1062,29 @@ export function endingOf(pet: Pet): Ending | null {
 /* ------------------------------------------------------------------ */
 
 /**
- * 시연 도구를 보여줄지. 개발 중이거나 `EXPO_PUBLIC_DEMO_TOOLS=1`이면 true입니다.
+ * 시연 도구를 보여줄지. `EXPO_PUBLIC_DEMO_TOOLS` 가 `1`/`true` 일 때만 true 입니다.
  *
- * ## 왜 `__DEV__`만으로는 부족한가
+ * ## 왜 `__DEV__` 가 아니라 환경 변수인가
  *
- * 시연 도구는 원래 개발 빌드에서만 보였습니다. 그런데 발표를 **APK로** 하면
- * `__DEV__`가 false라 도구가 사라지고, 성장과 엔딩을 보여줄 방법이 없어집니다
- * (청년기 180 EXP, 노년기는 함께한 지 7일 — 무대에서 기다릴 수 없습니다).
+ * 두 가지를 동시에 원했습니다.
  *
- * 그래서 환경 변수로도 열 수 있게 했습니다. `eas.json`의 `demo` 프로필로 만든
- * APK에서만 켜지고, `preview`·`production` 에서는 값이 없어 그대로 숨겨집니다.
+ * 1. **APK 로 발표할 수 있어야 한다.** `__DEV__` 는 APK 에서 false 라 도구가
+ *    사라지고, 성장과 엔딩을 보여줄 방법이 없어집니다 (청년기 180 EXP,
+ *    노년기는 함께한 지 7일 — 무대에서 기다릴 수 없습니다).
+ * 2. **평소 개발 중에는 안 보여야 한다.** 시연 도구는 실제 사용자가 볼 화면이
+ *    아닙니다. 개발 서버에서 항상 떠 있으면 진짜 화면을 확인하기 어렵습니다.
  *
- * 값 비교를 `=== '1'`로 못 박은 이유 — Babel이 이 자리에 **글자를 그대로**
- * 끼워 넣기 때문에, 변수를 안 정하면 `undefined`가 아니라 빈 문자열이 됩니다.
+ * 그래서 켜는 조건을 `__DEV__` 에서 떼어내 환경 변수 하나로 모았습니다.
+ *   - 로컬에서 시연 도구를 쓰고 싶을 때 → `.env` 에 `EXPO_PUBLIC_DEMO_TOOLS=1`
+ *   - 발표용 APK → `eas.json` 의 `demo` 프로필 (`.env` 는 EAS 에 안 올라갑니다)
+ *   - 그 외 `preview`·`production` → 값이 없어 그대로 숨겨집니다
+ *
+ * 값을 문자열로 비교하는 이유 — Babel 이 이 자리에 **글자를 그대로** 끼워 넣기
+ * 때문에, 변수를 안 정하면 `undefined` 가 아니라 빈 문자열이 됩니다.
  */
-export const SHOW_DEMO_TOOLS = __DEV__ || process.env.EXPO_PUBLIC_DEMO_TOOLS === '1';
+export const SHOW_DEMO_TOOLS = ['1', 'true'].includes(
+  (process.env.EXPO_PUBLIC_DEMO_TOOLS ?? '').trim().toLowerCase(),
+);
 
 /**
  * 발표 시연용. 다음 단계로 즉시 넘깁니다.
