@@ -17,6 +17,16 @@
         "buildType": "apk"
       }
     },
+    "demo": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_DEMO_TOOLS": "1"
+      }
+    },
     "production": {
       "autoIncrement": true
     }

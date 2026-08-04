@@ -101,9 +101,51 @@ export async function ensureDeviceId(): Promise<string> {
   const existing = await AsyncStorage.getItem(Keys.deviceId);
   if (existing) return existing;
 
-  const id = Crypto.randomUUID();
+  const id = randomId();
   await AsyncStorage.setItem(Keys.deviceId, id);
   return id;
+}
+
+/**
+ * 기기 ID로 쓸 임의의 문자열.
+ *
+ * ## 왜 `Crypto.randomUUID()` 하나로 끝내지 않는가
+ *
+ * 웹에서 `crypto.randomUUID`는 **보안 컨텍스트에서만** 있습니다. `https://` 와
+ * `http://localhost` 는 보안 컨텍스트지만, `http://192.168.0.25:8081` 처럼
+ * **LAN IP로 접속하면 아닙니다.** 그래서 폰이나 다른 노트북에서 개발 서버에
+ * 붙으면 여기서 이렇게 터졌습니다.
+ *
+ *   TypeError: getCrypto(...).randomUUID is not a function
+ *
+ * 게임 화면이 뜨자마자 이걸 부르기 때문에 화면 전체가 안 떴습니다.
+ *
+ * `getRandomValues` 는 보안 컨텍스트가 아니어도 있어서, 그걸로 UUID v4를 직접
+ * 만듭니다. 그것도 없으면 마지막으로 `Math.random` 을 씁니다 — 이 값은 대화를
+ * 구분하는 용도라 암호학적 강도가 필요하지 않습니다.
+ */
+function randomId(): string {
+  try {
+    return Crypto.randomUUID();
+  } catch {
+    // 아래로 넘어갑니다.
+  }
+
+  const bytes = new Uint8Array(16);
+  const webCrypto = globalThis.crypto;
+
+  if (typeof webCrypto?.getRandomValues === 'function') {
+    webCrypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+
+  // UUID v4 형식 맞추기 (버전 4, variant 10xx).
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /** 사용자가 고른 사진의 로컬 URI. 아직 안 골랐으면 null. */
